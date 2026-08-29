@@ -27,7 +27,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# DATABASE METRICHE E GIOCATORI CHIAVE SERIE A 2026/2027
+# DATABASE METRICHE E GIOCATORI CHIAVE SERIE A 2026/2027 (RETTIFICATO)
 DATI_LOCALI = {
     'Atalanta': {
         'xG_fatti': 1.92, 'xGA_subiti': 1.12,
@@ -85,7 +85,7 @@ DATI_LOCALI = {
         'stelle': [
             {'nome': 'Lautaro Martinez', 'ruolo': 'ATT', 'stat': 'xG/90: 0.68 | Tiri/90: 3.6'},
             {'nome': 'Hakan Calhanoglu', 'ruolo': 'CEN', 'stat': 'Passaggi Chiave: 3.0 | Rigori: 95%'},
-            {'nome': 'Curtis Jones', 'ruolo': 'CEN', 'stat': 'Accuratezza Passaggi: 92%'}
+            {'nome': 'Nicolò Barella', 'ruolo': 'CEN', 'stat': 'Recuperi Palla: 5.4/90'}
         ]
     },
     'Juventus': {
@@ -99,7 +99,7 @@ DATI_LOCALI = {
     'Lazio': {
         'xG_fatti': 1.52, 'xGA_subiti': 1.12,
         'stelle': [
-            {'nome': 'Andrea Pinamonti', 'ruolo': 'ATT', 'stat': 'xG/90: 0.45'},
+            {'nome': 'Taty Castellanos', 'ruolo': 'ATT', 'stat': 'xG/90: 0.48'},
             {'nome': 'Mattia Zaccagni', 'ruolo': 'ATT', 'stat': 'Falli Subiti: 3.0/90'}
         ]
     },
@@ -115,14 +115,14 @@ DATI_LOCALI = {
         'stelle': [
             {'nome': 'Christian Pulisic', 'ruolo': 'TRQ', 'stat': 'Partecipazione Gol: 44%'},
             {'nome': 'Rafael Leao', 'ruolo': 'ATT', 'stat': 'Dribbling: 3.7/90'},
-            {'nome': 'Diego Moreira', 'ruolo': 'CEN', 'stat': 'Accuratezza Passaggi: 90%'}
+            {'nome': 'Tijjani Reijnders', 'ruolo': 'CEN', 'stat': 'Passaggi: 91%'}
         ]
     },
     'Monza': {
         'xG_fatti': 1.12, 'xGA_subiti': 1.32,
         'stelle': [
-            {'nome': 'Gustavo Varela', 'ruolo': 'ATT', 'stat': 'xG/90: 0.42'},
-            {'nome': 'Idrissa Touré', 'ruolo': 'CEN', 'stat': 'Recuperi Palla: 5.4/90'}
+            {'nome': 'Milan Djuric', 'ruolo': 'ATT', 'stat': 'Duelli Aerei: 5.8/90'},
+            {'nome': 'Matteo Pessina', 'ruolo': 'CEN', 'stat': 'Accuratezza Passaggi: 88%'}
         ]
     },
     'Napoli': {
@@ -143,9 +143,9 @@ DATI_LOCALI = {
     'Roma': {
         'xG_fatti': 1.85, 'xGA_subiti': 0.98,
         'stelle': [
-            {'nome': 'Donyell Malen', 'ruolo': 'ATT', 'stat': 'xG/90: 0.68 | 3 Gol in avvio 26/27'},
+            {'nome': 'Donyell Malen', 'ruolo': 'ATT', 'stat': 'xG/90: 0.68 | 3 Gol 26/27'},
             {'nome': 'Paulo Dybala', 'ruolo': 'TRQ', 'stat': 'xA/90: 0.42 | 3 Assist 26/27'},
-            {'nome': 'Santiago Castro', 'ruolo': 'ATT', 'stat': 'Pressioni Alte: 12.0/90'}
+            {'nome': 'Artem Dovbyk', 'ruolo': 'ATT', 'stat': 'xG/90: 0.54'}
         ]
     },
     'Sassuolo': {
@@ -158,26 +158,25 @@ DATI_LOCALI = {
     'Torino': {
         'xG_fatti': 1.18, 'xGA_subiti': 1.08,
         'stelle': [
-            {'nome': 'Giovanni Simeone', 'ruolo': 'ATT', 'stat': 'xG/90: 0.46'},
+            {'nome': 'Duvan Zapata', 'ruolo': 'ATT', 'stat': 'xG/90: 0.44'},
             {'nome': 'Samuele Ricci', 'ruolo': 'CEN', 'stat': 'Passaggi: 90%'}
         ]
     },
     'Udinese': {
         'xG_fatti': 1.18, 'xGA_subiti': 1.28,
         'stelle': [
-            {'nome': 'Hassane Kamara', 'ruolo': 'DIF', 'stat': 'Cross/90: 4.1 | Assist Attesi: 0.28'},
-            {'nome': 'Nicolo Zaniolo', 'ruolo': 'TRQ', 'stat': 'Dribbling: 2.5/90'}
+            {'nome': 'Lorenzo Lucca', 'ruolo': 'ATT', 'stat': 'Duelli Aerei: 4.2/90'},
+            {'nome': 'Florian Thauvin', 'ruolo': 'TRQ', 'stat': 'Passaggi Chiave: 2.1/90'}
         ]
     },
     'Venezia': {
         'xG_fatti': 0.98, 'xGA_subiti': 1.68,
         'stelle': [
             {'nome': 'Joel Pohjanpalo', 'ruolo': 'ATT', 'stat': 'xG/90: 0.42'},
-            {'nome': 'Lorenzo Montipò', 'ruolo': 'POR', 'stat': 'Parate/90: 4.2'}
+            {'nome': 'Gianluca Busio', 'ruolo': 'CEN', 'stat': 'Inserimenti/90: 3.1'}
         ]
     }
 }
-
 # SCRAPING DINAMICO CON RETRY E FALLBACK
 @st.cache_data(ttl=3600)
 def fetch_understat_live():
