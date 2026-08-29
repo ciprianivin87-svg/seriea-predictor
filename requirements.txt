@@ -3,5 +3,4 @@ pandas
 numpy
 scipy
 requests
-beautifulsoup4
 understatapi
