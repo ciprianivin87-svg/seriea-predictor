@@ -1,11 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
+import json
+import re
+from bs4 import BeautifulSoup
 from scipy.stats import poisson
 
 st.set_page_config(page_title="Serie A Predictor Pro", page_icon="⚽", layout="centered")
 
-# Styling CSS per Mobile & Card Giocatori
+# Visual Styling CSS
 st.markdown("""
 <style>
     .main { background-color: #0f172a; }
@@ -23,10 +27,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# DATABASE METRICHE SQUADRE SERIE A 2026/2027 (AGGIORNATO)
-dati_squadre = {
+# DATABASE LOCALE DI RISERVA (GARANTISCE IL FUNZIONAMENTO AL 100%)
+DATI_LOCALI = {
     'Atalanta': {
-        'xG_fatti': 1.90, 'xGA_subiti': 1.15, 'possesso': 53.5,
+        'xG_fatti': 1.90, 'xGA_subiti': 1.15,
         'stelle': [
             {'nome': 'Mateo Retegui', 'ruolo': 'ATT', 'stat': 'xG/90: 0.62 | Colpi di Testa: 2.1'},
             {'nome': 'Ademola Lookman', 'ruolo': 'ATT', 'stat': 'Occasioni Create: 2.6/90'},
@@ -34,49 +38,49 @@ dati_squadre = {
         ]
     },
     'Bologna': {
-        'xG_fatti': 1.35, 'xGA_subiti': 1.10, 'possesso': 53.0,
+        'xG_fatti': 1.35, 'xGA_subiti': 1.10,
         'stelle': [
             {'nome': 'Riccardo Orsolini', 'ruolo': 'ATT', 'stat': 'xG/90: 0.42 | Tiri/90: 2.9'},
             {'nome': 'Santiago Castro', 'ruolo': 'ATT', 'stat': 'Pressioni Alte: 11.4/90'}
         ]
     },
     'Cagliari': {
-        'xG_fatti': 1.00, 'xGA_subiti': 1.40, 'possesso': 43.5,
+        'xG_fatti': 1.00, 'xGA_subiti': 1.40,
         'stelle': [
             {'nome': 'Roberto Piccoli', 'ruolo': 'ATT', 'stat': 'xG/90: 0.32 | Duelli: 4.1'},
             {'nome': 'Zito Luvumbo', 'ruolo': 'ATT', 'stat': 'Dribbling: 2.1/90'}
         ]
     },
     'Como': {
-        'xG_fatti': 1.45, 'xGA_subiti': 1.25, 'possesso': 52.0,
+        'xG_fatti': 1.45, 'xGA_subiti': 1.25,
         'stelle': [
             {'nome': 'Nico Paz', 'ruolo': 'TRQ', 'stat': 'Tiri/90: 2.8 | Assist Attesi: 0.32'},
             {'nome': 'Patrick Cutrone', 'ruolo': 'ATT', 'stat': 'xG/90: 0.45'}
         ]
     },
     'Fiorentina': {
-        'xG_fatti': 1.45, 'xGA_subiti': 1.20, 'possesso': 52.0,
+        'xG_fatti': 1.45, 'xGA_subiti': 1.20,
         'stelle': [
             {'nome': 'Moise Kean', 'ruolo': 'ATT', 'stat': 'xG/90: 0.50 | Scatti: 8.5'},
             {'nome': 'Albert Gudmundsson', 'ruolo': 'TRQ', 'stat': 'Passaggi Chiave: 2.4/90'}
         ]
     },
     'Frosinone': {
-        'xG_fatti': 1.05, 'xGA_subiti': 1.50, 'possesso': 44.0,
+        'xG_fatti': 1.05, 'xGA_subiti': 1.50,
         'stelle': [
             {'nome': 'Giuseppe Ambrosino', 'ruolo': 'ATT', 'stat': 'xG/90: 0.35'},
             {'nome': 'Luca Garritano', 'ruolo': 'CEN', 'stat': 'Passaggi Chiave: 1.9/90'}
         ]
     },
     'Genoa': {
-        'xG_fatti': 1.10, 'xGA_subiti': 1.25, 'possesso': 45.0,
+        'xG_fatti': 1.10, 'xGA_subiti': 1.25,
         'stelle': [
             {'nome': 'Andrea Pinamonti', 'ruolo': 'ATT', 'stat': 'xG/90: 0.38'},
             {'nome': 'Morten Frendrup', 'ruolo': 'CEN', 'stat': 'Contrasti Vinti: 3.4/90'}
         ]
     },
     'Inter': {
-        'xG_fatti': 2.10, 'xGA_subiti': 0.80, 'possesso': 58.4,
+        'xG_fatti': 2.10, 'xGA_subiti': 0.80,
         'stelle': [
             {'nome': 'Lautaro Martinez', 'ruolo': 'ATT', 'stat': 'xG/90: 0.65 | Tiri/90: 3.4'},
             {'nome': 'Hakan Calhanoglu', 'ruolo': 'CEN', 'stat': 'Passaggi Chiave: 2.8'},
@@ -84,7 +88,7 @@ dati_squadre = {
         ]
     },
     'Juventus': {
-        'xG_fatti': 1.70, 'xGA_subiti': 0.85, 'possesso': 53.0,
+        'xG_fatti': 1.70, 'xGA_subiti': 0.85,
         'stelle': [
             {'nome': 'Dusan Vlahovic', 'ruolo': 'ATT', 'stat': 'xG/90: 0.58 | Conversione: 18%'},
             {'nome': 'Kenan Yildiz', 'ruolo': 'TRQ', 'stat': 'Dribbling: 2.3/90'},
@@ -92,21 +96,21 @@ dati_squadre = {
         ]
     },
     'Lazio': {
-        'xG_fatti': 1.50, 'xGA_subiti': 1.15, 'possesso': 50.5,
+        'xG_fatti': 1.50, 'xGA_subiti': 1.15,
         'stelle': [
             {'nome': 'Taty Castellanos', 'ruolo': 'ATT', 'stat': 'xG/90: 0.48'},
             {'nome': 'Mattia Zaccagni', 'ruolo': 'ATT', 'stat': 'Falli Subiti: 2.8/90'}
         ]
     },
     'Lecce': {
-        'xG_fatti': 0.95, 'xGA_subiti': 1.40, 'possesso': 42.0,
+        'xG_fatti': 0.95, 'xGA_subiti': 1.40,
         'stelle': [
             {'nome': 'Nikola Krstovic', 'ruolo': 'ATT', 'stat': 'Tiri Totali: 3.2/90'},
             {'nome': 'Lameck Banda', 'ruolo': 'ATT', 'stat': 'Dribbling: 2.4/90'}
         ]
     },
     'Milan': {
-        'xG_fatti': 1.85, 'xGA_subiti': 1.10, 'possesso': 54.2,
+        'xG_fatti': 1.85, 'xGA_subiti': 1.10,
         'stelle': [
             {'nome': 'Christian Pulisic', 'ruolo': 'TRQ', 'stat': 'Partecipazione Gol: 42%'},
             {'nome': 'Rafael Leao', 'ruolo': 'ATT', 'stat': 'Dribbling: 3.5/90'},
@@ -114,14 +118,14 @@ dati_squadre = {
         ]
     },
     'Monza': {
-        'xG_fatti': 1.10, 'xGA_subiti': 1.35, 'possesso': 46.2,
+        'xG_fatti': 1.10, 'xGA_subiti': 1.35,
         'stelle': [
             {'nome': 'Milan Djuric', 'ruolo': 'ATT', 'stat': 'Duelli Aerei: 5.8/90'},
             {'nome': 'Matteo Pessina', 'ruolo': 'CEN', 'stat': 'Accuratezza Passaggi: 88%'}
         ]
     },
     'Napoli': {
-        'xG_fatti': 1.75, 'xGA_subiti': 0.95, 'possesso': 56.1,
+        'xG_fatti': 1.75, 'xGA_subiti': 0.95,
         'stelle': [
             {'nome': 'Romelu Lukaku', 'ruolo': 'ATT', 'stat': 'xG+xA/90: 0.72'},
             {'nome': 'Khvicha Kvaratskhelia', 'ruolo': 'ATT', 'stat': 'Tiri in Porta: 1.8/90'},
@@ -129,58 +133,111 @@ dati_squadre = {
         ]
     },
     'Parma': {
-        'xG_fatti': 1.25, 'xGA_subiti': 1.45, 'possesso': 47.0,
+        'xG_fatti': 1.25, 'xGA_subiti': 1.45,
         'stelle': [
             {'nome': 'Dennis Man', 'ruolo': 'ATT', 'stat': 'Dribbling: 2.8/90 | xG: 0.39'},
-            {'nome': 'Ange-Yoan Bonny', 'ruolo': 'ATT', 'stat': 'Sponde Chiave: 2.1/90'}
+            {'nome': 'Ange-Yoan Bonny', 'ruolo': 'ATT', 'stat': 'Sondes Chiave: 2.1/90'}
         ]
     },
     'Roma': {
-        'xG_fatti': 1.60, 'xGA_subiti': 1.00, 'possesso': 52.5,
+        'xG_fatti': 1.60, 'xGA_subiti': 1.00,
         'stelle': [
             {'nome': 'Paulo Dybala', 'ruolo': 'TRQ', 'stat': 'xA/90: 0.35 | Tiri: 2.2'},
             {'nome': 'Artem Dovbyk', 'ruolo': 'ATT', 'stat': 'xG/90: 0.54'}
         ]
     },
     'Sassuolo': {
-        'xG_fatti': 1.20, 'xGA_subiti': 1.45, 'possesso': 48.5,
+        'xG_fatti': 1.20, 'xGA_subiti': 1.45,
         'stelle': [
             {'nome': 'Domenico Berardi', 'ruolo': 'ATT', 'stat': 'xG+xA/90: 0.68'},
             {'nome': 'Armand Laurienté', 'ruolo': 'ATT', 'stat': 'Dribbling: 2.9/90'}
         ]
     },
     'Torino': {
-        'xG_fatti': 1.15, 'xGA_subiti': 1.10, 'possesso': 47.5,
+        'xG_fatti': 1.15, 'xGA_subiti': 1.10,
         'stelle': [
             {'nome': 'Duvan Zapata', 'ruolo': 'ATT', 'stat': 'xG/90: 0.44'},
             {'nome': 'Samuele Ricci', 'ruolo': 'CEN', 'stat': 'Passaggi: 89%'}
         ]
     },
     'Udinese': {
-        'xG_fatti': 1.15, 'xGA_subiti': 1.30, 'possesso': 44.8,
+        'xG_fatti': 1.15, 'xGA_subiti': 1.30,
         'stelle': [
             {'nome': 'Lorenzo Lucca', 'ruolo': 'ATT', 'stat': 'Duelli Aerei: 4.2/90'},
             {'nome': 'Florian Thauvin', 'ruolo': 'TRQ', 'stat': 'Passaggi Chiave: 2.1/90'}
         ]
     },
     'Venezia': {
-        'xG_fatti': 0.95, 'xGA_subiti': 1.70, 'possesso': 42.0,
+        'xG_fatti': 0.95, 'xGA_subiti': 1.70,
         'stelle': [
             {'nome': 'Joel Pohjanpalo', 'ruolo': 'ATT', 'stat': 'xG/90: 0.40'},
             {'nome': 'Gianluca Busio', 'ruolo': 'CEN', 'stat': 'Inserimenti/90: 3.1'}
         ]
     }
 }
-squadre = sorted(list(dati_squadre.keys()))
 
+# SCRAPING DINAMICO CON RETRY E FALLBACK
+@st.cache_data(ttl=3600)
+def fetch_understat_live():
+    url = "https://understat.com/league/Serie_A"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7'
+    }
+    
+    try:
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.content, 'html.parser')
+            scripts = soup.find_all('script')
+            
+            teams_data = {}
+            for script in scripts:
+                if script.string and 'teamsData' in script.string:
+                    match = re.search(r"JSON\.parse\('([^']+)'\)", script.string)
+                    if match:
+                        raw = match.group(1).encode('utf-8').decode('unicode-escape')
+                        teams_raw = json.loads(raw)
+                        
+                        for _, t_info in teams_raw.items():
+                            t_name = t_info['title']
+                            history = t_info['history']
+                            games = max(1, len(history))
+                            tot_xg = sum(float(x['xG']) for x in history)
+                            tot_xga = sum(float(x['xGA']) for x in history)
+                            
+                            # Mantieni le stelle dal DB locale ma aggiorna i valori xG dal web
+                            stelle_locali = DATI_LOCALI.get(t_name, {}).get('stelle', [])
+                            teams_data[t_name] = {
+                                'xG_fatti': round(tot_xg / games, 2),
+                                'xGA_subiti': round(tot_xga / games, 2),
+                                'stelle': stelle_locali
+                            }
+            if teams_data:
+                return teams_data, True
+    except Exception:
+        pass
+    
+    return DATI_LOCALI, False
+
+# ESECUZIONE APP
 st.title("⚽ Serie A Analytics Engine")
 st.caption("Previsioni Poisson & Schede Tecniche Sintetiche")
 
+dati_squadre, is_live = fetch_understat_live()
+
+if is_live:
+    st.sidebar.success("🟢 Dati xG aggiornati live da Understat")
+else:
+    st.sidebar.info("🔵 Modalità Offline/Locale attiva (Dati stabili 2026/2027)")
+
+squadre = sorted(list(dati_squadre.keys()))
+
 col1, col2 = st.columns(2)
 with col1:
-    casa = st.selectbox("Squadra CASA", squadre, index=squadre.index('Inter'))
+    casa = st.selectbox("Squadra CASA", squadre, index=squadre.index('Inter') if 'Inter' in squadre else 0)
 with col2:
-    trasferta = st.selectbox("Squadra TRASFERTA", squadre, index=squadre.index('Milan'))
+    trasferta = st.selectbox("Squadra TRASFERTA", squadre, index=squadre.index('Milan') if 'Milan' in squadre else min(1, len(squadre)-1))
 
 if casa == trasferta:
     st.warning("⚠️ Seleziona due squadre diverse per analizzare il match.")
@@ -215,7 +272,7 @@ else:
 
         st.success(f"🎯 Risultato Esatto Modellato: **{casa} {g_c} - {g_t} {trasferta}** ({prob_risultato_top:.1f}% di probabilità)")
 
-        # 4. GIOCATORI CHIAVE (SCHEDE SCHEMATICHE NON DISCORSIVE)
+        # 4. GIOCATORI CHIAVE
         st.markdown("---")
         st.subheader("⭐ Giocatori Chiave del Match")
         
@@ -226,7 +283,7 @@ else:
             for player in d_c.get('stelle', []):
                 st.markdown(f"""
                 <div class="player-card">
-                    <div class="player-name">[{player['ruolo']}] {player['nome']}</div>
+                    <div class="player-name">[{player.get('ruolo', 'GIOC')}] {player['nome']}</div>
                     <div class="player-stat">📊 {player['stat']}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -236,7 +293,7 @@ else:
             for player in d_t.get('stelle', []):
                 st.markdown(f"""
                 <div class="player-card">
-                    <div class="player-name">[{player['ruolo']}] {player['nome']}</div>
+                    <div class="player-name">[{player.get('ruolo', 'GIOC')}] {player['nome']}</div>
                     <div class="player-stat">📊 {player['stat']}</div>
                 </div>
                 """, unsafe_allow_html=True)
