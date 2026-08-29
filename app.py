@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import asyncio
 from scipy.stats import poisson
-from understatapi import UnderstatClient
 
 st.set_page_config(page_title="Serie A Predictor Pro", page_icon="⚽", layout="centered")
 
+# Styling CSS per Mobile & Card Giocatori
 st.markdown("""
 <style>
     .main { background-color: #0f172a; }
@@ -15,137 +14,158 @@ st.markdown("""
     .player-card {
         background-color: #1e293b;
         border-left: 4px solid #38bdf8;
-        padding: 8px 12px;
-        margin-bottom: 6px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
         border-radius: 6px;
     }
-    .player-name { font-weight: bold; color: #f8fafc; font-size: 13px; }
-    .player-stat { color: #94a3b8; font-size: 11px; }
+    .player-name { font-weight: bold; color: #f8fafc; font-size: 14px; }
+    .player-stat { color: #94a3b8; font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
 
-# GESTIONE FETCHING ASINCRONO CON UNDERSTATAPI
-async def async_fetch_understat():
-    async with UnderstatClient() as client:
-        # Recupera dati ultime stagioni Serie A
-        leagues_data = await client.league("Serie_A").get_team_data(season=2024)
-        players_data_raw = await client.league("Serie_A").get_player_data(season=2024)
-        return leagues_data, players_data_raw
+# 1. DATABASE METRICHE SQUADRE E GIOCATORI CHIAVE (SCHEDE TECNICHE COMPATTE)
+dati_squadre = {
+    'Inter': {
+        'xG_fatti': 2.05, 'xGA_subiti': 0.80, 'possesso': 58.4,
+        'stelle': [
+            {'nome': 'Lautaro Martinez', 'ruolo': 'ATT', 'stat': 'xG/90: 0.65 | Tiri/90: 3.4'},
+            {'nome': 'Hakan Calhanoglu', 'ruolo': 'CEN', 'stat': 'Passaggi Chiave: 2.8 | Rigori: 95%'},
+            {'nome': 'Nicolò Barella', 'ruolo': 'CEN', 'stat': 'Recuperi: 5.2 | Assist Attesi: 0.25'}
+        ]
+    },
+    'Juventus': {
+        'xG_fatti': 1.70, 'xGA_subiti': 0.85, 'possesso': 52.8,
+        'stelle': [
+            {'nome': 'Dusan Vlahovic', 'ruolo': 'ATT', 'stat': 'xG/90: 0.58 | Conversione: 18%'},
+            {'nome': 'Kenan Yildiz', 'ruolo': 'TRQ', 'stat': 'Dribbling Riusciti: 2.3/90'},
+            {'nome': 'Gleison Bremer', 'ruolo': 'DIF', 'stat': 'Duelli Vinti: 68% | Contrasti: 3.1'}
+        ]
+    },
+    'Milan': {
+        'xG_fatti': 1.85, 'xGA_subiti': 1.10, 'possesso': 54.2,
+        'stelle': [
+            {'nome': 'Christian Pulisic', 'ruolo': 'TRQ', 'stat': 'Partecipazione Gol: 42%'},
+            {'nome': 'Rafael Leao', 'ruolo': 'ATT', 'stat': 'Dribbling: 3.5/90 | Assist Attesi: 0.30'},
+            {'nome': 'Tijjani Reijnders', 'ruolo': 'CEN', 'stat': 'Accuratezza Passaggi: 91%'}
+        ]
+    },
+    'Napoli': {
+        'xG_fatti': 1.75, 'xGA_subiti': 0.95, 'possesso': 56.1,
+        'stelle': [
+            {'nome': 'Romelu Lukaku', 'ruolo': 'ATT', 'stat': 'xG+xA/90: 0.72 | Sponde: 4.8'},
+            {'nome': 'Khvicha Kvaratskhelia', 'ruolo': 'ATT', 'stat': 'Tiri in Porta: 1.8/90'},
+            {'nome': 'Stanislav Lobotka', 'ruolo': 'CEN', 'stat': 'Palloni Recuperati: 6.4/90'}
+        ]
+    },
+    'Atalanta': {
+        'xG_fatti': 1.90, 'xGA_subiti': 1.15, 'possesso': 53.5,
+        'stelle': [
+            {'nome': 'Mateo Retegui', 'ruolo': 'ATT', 'stat': 'xG/90: 0.62 | Colpi di Testa: 2.1'},
+            {'nome': 'Ademola Lookman', 'ruolo': 'ATT', 'stat': 'Occasioni Create: 2.6/90'},
+            {'nome': 'Charles De Ketelaere', 'ruolo': 'TRQ', 'stat': 'Assist Attesi: 0.28/90'}
+        ]
+    },
+    'Roma': {
+        'xG_fatti': 1.55, 'xGA_subiti': 1.05, 'possesso': 51.0,
+        'stelle': [
+            {'nome': 'Paulo Dybala', 'ruolo': 'TRQ', 'stat': 'xA/90: 0.35 | Tiri da Fuori: 1.4'},
+            {'nome': 'Artem Dovbyk', 'ruolo': 'ATT', 'stat': 'xG/90: 0.52 | Protezione Palla: 78%'}
+        ]
+    },
+    'Lazio': {
+        'xG_fatti': 1.50, 'xGA_subiti': 1.15, 'possesso': 50.5,
+        'stelle': [
+            {'nome': 'Taty Castellanos', 'ruolo': 'ATT', 'stat': 'xG/90: 0.48 | Pressioni Alte: 12.3'},
+            {'nome': 'Mattia Zaccagni', 'ruolo': 'ATT', 'stat': 'Falli Subiti: 2.8/90 | Cross: 3.2'}
+        ]
+    },
+    'Fiorentina': {
+        'xG_fatti': 1.45, 'xGA_subiti': 1.20, 'possesso': 52.0,
+        'stelle': [
+            {'nome': 'Moise Kean', 'ruolo': 'ATT', 'stat': 'xG/90: 0.50 | Scatti in Profondità: 8.5'},
+            {'nome': 'Albert Gudmundsson', 'ruolo': 'TRQ', 'stat': 'Passaggi Chiave: 2.4/90'}
+        ]
+    },
+    'Bologna': {'xG_fatti': 1.35, 'xGA_subiti': 1.10, 'possesso': 53.0, 'stelle': [{'nome': 'Riccardo Orsolini', 'ruolo': 'ATT', 'stat': 'xG/90: 0.42 | Tiri/90: 2.9'}]},
+    'Torino': {'xG_fatti': 1.15, 'xGA_subiti': 1.10, 'possesso': 47.5, 'stelle': [{'nome': 'Samuele Ricci', 'ruolo': 'CEN', 'stat': 'Accuratezza Passaggi: 89%'}]},
+    'Genoa': {'xG_fatti': 1.10, 'xGA_subiti': 1.25, 'possesso': 45.0, 'stelle': [{'nome': 'Andrea Pinamonti', 'ruolo': 'ATT', 'stat': 'xG/90: 0.38'}]},
+    'Monza': {'xG_fatti': 1.10, 'xGA_subiti': 1.35, 'possesso': 46.2, 'stelle': [{'nome': 'Daniel Maldini', 'ruolo': 'TRQ', 'stat': 'Tiri in Porta: 1.2/90'}]},
+    'Udinese': {'xG_fatti': 1.15, 'xGA_subiti': 1.30, 'possesso': 44.8, 'stelle': [{'nome': 'Lorenzo Lucca', 'ruolo': 'ATT', 'stat': 'Duelli Aerei Vinti: 4.2/90'}]},
+    'Cagliari': {'xG_fatti': 1.00, 'xGA_subiti': 1.40, 'possesso': 43.5, 'stelle': [{'nome': 'Roberto Piccoli', 'ruolo': 'ATT', 'stat': 'xG/90: 0.32'}]},
+    'Parma': {'xG_fatti': 1.25, 'xGA_subiti': 1.45, 'possesso': 47.0, 'stelle': [{'nome': 'Dennis Man', 'ruolo': 'ATT', 'stat': 'Dribbling: 2.8/90 | xG: 0.39'}]},
+    'Lecce': {'xG_fatti': 0.95, 'xGA_subiti': 1.40, 'possesso': 42.0, 'stelle': [{'nome': 'Nikola Krstovic', 'ruolo': 'ATT', 'stat': 'Tiri Totali: 3.2/90'}]},
+    'Verona': {'xG_fatti': 1.00, 'xGA_subiti': 1.45, 'possesso': 41.5, 'stelle': [{'nome': 'Casper Tengstedt', 'ruolo': 'ATT', 'stat': 'Conversione: 22%'}]},
+    'Empoli': {'xG_fatti': 0.90, 'xGA_subiti': 1.40, 'possesso': 43.0, 'stelle': [{'nome': 'Sebastiano Esposito', 'ruolo': 'ATT', 'stat': 'Occasioni Create: 1.8/90'}]},
+    'Como': {'xG_fatti': 1.10, 'xGA_subiti': 1.50, 'possesso': 48.0, 'stelle': [{'nome': 'Nico Paz', 'ruolo': 'TRQ', 'stat': 'Tiri/90: 2.8 | Assist Attesi: 0.22'}]},
+    'Venezia': {'xG_fatti': 0.95, 'xGA_subiti': 1.75, 'possesso': 41.0, 'stelle': [{'nome': 'Joel Pohjanpalo', 'ruolo': 'ATT', 'stat': 'xG/90: 0.40'}]}
+}
 
-@st.cache_data(ttl=3600)
-def load_live_data():
-    try:
-        # Esecuzione del ciclo asincrono richiesto da understatapi
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        teams_raw, players_raw = loop.run_until_complete(async_fetch_understat())
-        
-        teams_data = {}
-        players_data = {}
+squadre = sorted(list(dati_squadre.keys()))
 
-        # Parsing dati squadre
-        for t_id, t_info in teams_raw.items():
-            team_name = t_info['title']
-            history = t_info['history']
-            games = max(1, len(history))
-            tot_xg = sum(float(x['xG']) for x in history)
-            tot_xga = sum(float(x['xGA']) for x in history)
-            
-            teams_data[team_name] = {
-                'xG_fatti': round(tot_xg / games, 2),
-                'xGA_subiti': round(tot_xga / games, 2)
-            }
+st.title("⚽ Serie A Analytics Engine")
+st.caption("Previsioni Poisson & Schede Tecniche Sintetiche")
 
-        # Parsing dati giocatori
-        for p in players_raw:
-            t_name = p['team_title']
-            if t_name not in players_data:
-                players_data[t_name] = []
-            
-            if len(players_data[t_name]) < 2:
-                time_played = max(1, int(p['time']))
-                xg_90 = (float(p['xG']) / time_played) * 90
-                xa_90 = (float(p['xA']) / time_played) * 90
-                players_data[t_name].append({
-                    'nome': p['player_name'],
-                    'stat': f"xG/90: {xg_90:.2f} | xA/90: {xa_90:.2f}"
-                })
+col1, col2 = st.columns(2)
+with col1:
+    casa = st.selectbox("Squadra CASA", squadre, index=squadre.index('Inter'))
+with col2:
+    trasferta = st.selectbox("Squadra TRASFERTA", squadre, index=squadre.index('Milan'))
 
-        return teams_data, players_data, True
-    except Exception as e:
-        return {}, {}, False
-
-# ESSECUZIONE APP
-st.title("⚽ Serie A Predictor Engine")
-st.caption("Analisi avanzata con metriche ufficiali Understat")
-
-teams_data, players_data, is_live = load_live_data()
-
-if is_live and teams_data:
-    st.sidebar.success("🟢 Connesso live a Understat API")
+if casa == trasferta:
+    st.warning("⚠️ Seleziona due squadre diverse per analizzare il match.")
 else:
-    st.sidebar.error("🔴 Impossibile contattare i server Understat. Verifica la rete o riprova più tardi.")
+    if st.button("🚀 CALCOLA ANALISI & GIOCATORI CHIAVE"):
+        d_c = dati_squadre[casa]
+        d_t = dati_squadre[trasferta]
 
-squadre = sorted(list(teams_data.keys())) if teams_data else []
+        # 2. CALCOLO POISSON DINAMICO
+        lambda_casa = (d_c['xG_fatti'] + d_t['xGA_subiti']) / 2
+        lambda_trasferta = (d_t['xG_fatti'] + d_c['xGA_subiti']) / 2
 
-if squadre:
-    col1, col2 = st.columns(2)
-    with col1:
-        casa = st.selectbox("Squadra CASA", squadre, index=0)
-    with col2:
-        trasferta = st.selectbox("Squadra TRASFERTA", squadre, index=min(1, len(squadre)-1))
+        matrice_p = np.zeros((6, 6))
+        for i in range(6):
+            for j in range(6):
+                matrice_p[i, j] = poisson.pmf(i, lambda_casa) * poisson.pmf(j, lambda_trasferta) * 100
 
-    if casa == trasferta:
-        st.warning("⚠️ Seleziona due squadre diverse.")
-    else:
-        if st.button("🚀 ELABORA PRONOSTICO & GIOCATORI"):
-            d_c = teams_data[casa]
-            d_t = teams_data[trasferta]
+        prob_1 = np.sum(np.tril(matrice_p, -1))
+        prob_x = np.sum(np.diag(matrice_p))
+        prob_2 = np.sum(np.triu(matrice_p, 1))
 
-            lambda_casa = (d_c['xG_fatti'] + d_t['xGA_subiti']) / 2
-            lambda_trasferta = (d_t['xG_fatti'] + d_c['xGA_subiti']) / 2
+        g_c, g_t = np.unravel_index(np.argmax(matrice_p), matrice_p.shape)
+        prob_risultato_top = matrice_p[g_c, g_t]
 
-            matrice_p = np.zeros((6, 6))
-            for i in range(6):
-                for j in range(6):
-                    matrice_p[i, j] = poisson.pmf(i, lambda_casa) * poisson.pmf(j, lambda_trasferta) * 100
+        # 3. OUTPUT ESITO 1X2 E RISULTATO ESATTO
+        st.markdown("---")
+        st.subheader("📊 Probabilità Esito 1X2")
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"Vittoria {casa}", f"{prob_1:.1f}%")
+        c2.metric("Pareggio (X)", f"{prob_x:.1f}%")
+        c3.metric(f"Vittoria {trasferta}", f"{prob_2:.1f}%")
 
-            prob_1 = np.sum(np.tril(matrice_p, -1))
-            prob_x = np.sum(np.diag(matrice_p))
-            prob_2 = np.sum(np.triu(matrice_p, 1))
+        st.success(f"🎯 Risultato Esatto Modellato: **{casa} {g_c} - {g_t} {trasferta}** ({prob_risultato_top:.1f}% di probabilità)")
 
-            g_c, g_t = np.unravel_index(np.argmax(matrice_p), matrice_p.shape)
-            prob_top = matrice_p[g_c, g_t]
+        # 4. GIOCATORI CHIAVE (SCHEDE SCHEMATICHE NON DISCORSIVE)
+        st.markdown("---")
+        st.subheader("⭐ Giocatori Chiave del Match")
+        
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.markdown(f"**🏠 {casa}**")
+            for player in d_c.get('stelle', []):
+                st.markdown(f"""
+                <div class="player-card">
+                    <div class="player-name">[{player['ruolo']}] {player['nome']}</div>
+                    <div class="player-stat">📊 {player['stat']}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            st.markdown("---")
-            st.subheader("📊 Probabilità Calcolate da Understat")
-            c1, c2, c3 = st.columns(3)
-            c1.metric(f"Vittoria {casa}", f"{prob_1:.1f}%")
-            c2.metric("Pareggio (X)", f"{prob_x:.1f}%")
-            c3.metric(f"Vittoria {trasferta}", f"{prob_2:.1f}%")
-
-            st.success(f"🎯 Risultato Esatto Modellato: **{casa} {g_c} - {g_t} {trasferta}** ({prob_top:.1f}% probabilità)")
-
-            st.markdown("---")
-            st.subheader("⭐ Top Giocatori (Understat)")
-            
-            cg1, cg2 = st.columns(2)
-            with cg1:
-                st.markdown(f"**🏠 {casa}**")
-                for p in players_data.get(casa, []):
-                    st.markdown(f"""
-                    <div class="player-card">
-                        <div class="player-name">👤 {p['nome']}</div>
-                        <div class="player-stat">📊 {p['stat']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            with cg2:
-                st.markdown(f"**✈️ {trasferta}**")
-                for p in players_data.get(trasferta, []):
-                    st.markdown(f"""
-                    <div class="player-card">
-                        <div class="player-name">👤 {p['nome']}</div>
-                        <div class="player-stat">📊 {p['stat']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+        with col_g2:
+            st.markdown(f"**✈️ {trasferta}**")
+            for player in d_t.get('stelle', []):
+                st.markdown(f"""
+                <div class="player-card">
+                    <div class="player-name">[{player['ruolo']}] {player['nome']}</div>
+                    <div class="player-stat">📊 {player['stat']}</div>
+                </div>
+                """, unsafe_allow_html=True)
