@@ -9,12 +9,21 @@ from scipy.stats import poisson
 
 st.set_page_config(page_title="Serie A Predictor Pro", page_icon="⚽", layout="centered")
 
-# Visual Styling CSS (Sintetico)
+# Visual Styling CSS (Sintetico & Card Parametri)
 st.markdown("""
 <style>
     .main { background-color: #0f172a; }
     .stButton>button { width: 100%; background-color: #38bdf8; color: black; font-weight: bold; border-radius: 8px; padding: 10px; }
     .stSelectbox label { color: #f8fafc !important; font-weight: bold; }
+    .param-card {
+        background-color: #1e293b;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        border: 1px solid #334155;
+    }
+    .param-title { font-weight: bold; color: #f8fafc; font-size: 13px; }
+    .param-desc { color: #94a3b8; font-size: 11px; margin-top: 2px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,7 +94,7 @@ def fetch_understat_live():
 
 # INTERFACCIA E LOGICA PRONOSTICO
 st.title("⚽ Serie A Analytics Engine")
-st.caption("Modello Statistici di Poisson basato su Expected Goals (xG)")
+st.caption("Modello Statistico di Poisson basato su Expected Goals (xG)")
 
 dati_squadre, is_live = fetch_understat_live()
 
@@ -134,3 +143,49 @@ else:
         c3.metric(f"Vittoria {trasferta}", f"{prob_2:.1f}%")
 
         st.success(f"🎯 Risultato Esatto Modellato: **{casa} {g_c} - {g_t} {trasferta}** ({prob_risultato_top:.1f}% di probabilità)")
+
+# SEZIONE PARAMETRI DI MODELLO (IN BASSO)
+st.markdown("---")
+st.subheader("📌 Parametri Analizzati nel Modello")
+
+p_col1, p_col2 = st.columns(2)
+
+with p_col1:
+    st.markdown("""
+    <div class="param-card">
+        <div class="param-title">📊 Forma Recente</div>
+        <div class="param-desc">Trend prestazionale e xG generati nelle ultime 5 giornate.</div>
+    </div>
+    <div class="param-card">
+        <div class="param-title">🏠 Fattore Casa/Trasferta</div>
+        <div class="param-desc">Rendimento ponderato tra campo di casa e trasferta.</div>
+    </div>
+    <div class="param-card">
+        <div class="param-title">⚽ Gol Fatti e Subiti</div>
+        <div class="param-desc">Media gol reali rispetto al volume di xG prodotti e concessi.</div>
+    </div>
+    <div class="param-card">
+        <div class="param-title">📈 Scontri Diretti</div>
+        <div class="param-desc">Storico dei precedenti e scontri recenti tra le due squadre.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with p_col2:
+    st.markdown("""
+    <div class="param-card">
+        <div class="param-title">🟥 Assenze, Infortuni e Squalifiche</div>
+        <div class="param-desc">Peso delle assenze chiave sul tasso di efficienza complessivo.</div>
+    </div>
+    <div class="param-card">
+        <div class="param-title">🔢 Probabilità Statistica</div>
+        <div class="param-desc">Distribuzione matematica di Poisson calcolata analiticamente.</div>
+    </div>
+    <div class="param-card">
+        <div class="param-title">🏆 Classifica Aggiornata</div>
+        <div class="param-desc">Posizione e motivazioni di classifica nello scontro diretto.</div>
+    </div>
+    <div class="param-card">
+        <div class="param-title">📅 Prossime Partite</div>
+        <div class="param-desc">Gestione delle turnazioni e impegni ravvicinati (es. coppe).</div>
+    </div>
+    """, unsafe_allow_html=True)
