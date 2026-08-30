@@ -140,19 +140,36 @@ def fetch_top_scorers():
 
 def calcola_moltiplicatore_forma(form_str):
     """Calcola il moltiplicatore di forma basato sulle ultime 5 partite."""
-    if not form_str or form_str == "N/A":
-        return 1.0, []
+    if not form_str or not isinstance(form_str, str) or form_str == "N/A":
+        return 1.0, ["D", "D", "D", "D", "D"]  # Fallback di default
     
-    risultati = [r.strip() for r in form_str.split(",") if r.strip()]
+    # Pulisce la stringa rimuovendo spazi e splitta per virgola
+    risultati = [r.strip().upper() for r in form_str.split(",") if r.strip()]
+    
+    # Prende solo gli ultimi 5 risultati
+    ultimi_5 = risultati[-5:] if len(risultati) >= 5 else risultati
+    
     modificatore = 0.0
-    for r in risultati[-5:]:
+    for r in ultimi_5:
         if r == "W":
             modificatore += 0.05
         elif r == "L":
             modificatore -= 0.05
 
     moltiplicatore = max(0.7, min(1.3, 1.0 + modificatore))
-    return moltiplicatore, risultati[-5:]
+    return moltiplicatore, ultimi_5
+
+def render_form_badges(form_list):
+    """Genera l'HTML per mostrare i badge visuali della forma (W/D/L)."""
+    if not form_list:
+        return '<span style="color: #94a3b8; font-size: 12px;">Dati non disponibili</span>'
+    
+    html = ""
+    for r in form_list:
+        # Mappatura per sicurezze se l'API invia caratteri inattesi
+        badge_class = r if r in ["W", "D", "L"] else "D"
+        html += f'<span class="form-badge form-{badge_class}">{r}</span>'
+    return html
 
 def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, form_trasferta):
     """Calcola le probabilità 1X2 e il risultato esatto."""
@@ -235,8 +252,8 @@ if successo and giornata:
     st_c = stats_squadre.get(casa, {"pos": "-", "punti": 0, "gf": 1.2, "ga": 1.1, "tot_gf": 15, "form": "W,D,L,W,D"})
     st_t = stats_squadre.get(trasferta, {"pos": "-", "punti": 0, "gf": 1.1, "ga": 1.2, "tot_gf": 12, "form": "D,L,W,D,L"})
 
-    mult_c, list_c = calcola_moltiplicatore_forma(st_c["form"])
-    mult_t, list_t = calcola_moltiplicatore_forma(st_t["form"])
+    mult_c, list_c = calcola_moltiplicatore_forma(st_c.get("form", ""))
+    mult_t, list_t = calcola_moltiplicatore_forma(st_t.get("form", ""))
 
     col1, col2 = st.columns(2)
 
@@ -244,13 +261,17 @@ if successo and giornata:
         st.markdown(f"#### 🏠 {casa}")
         st.write(f"• **Posizione in classifica:** {st_c['pos']}° ({st_c['punti']} pt)")
         st.write(f"• **Media Gol (Segnati/Subiti):** {st_c['gf']:.2f} / {st_c['ga']:.2f}")
+        # Rendering HTML dei badge con st.markdown
         st.markdown(f"• **Ultime 5:** {render_form_badges(list_c)}", unsafe_allow_html=True)
+        st.caption(f"Fattore Ponderazione Forma: **x{mult_c:.2f}**")
 
     with col2:
         st.markdown(f"#### ✈️ {trasferta}")
         st.write(f"• **Posizione in classifica:** {st_t['pos']}° ({st_t['punti']} pt)")
         st.write(f"• **Media Gol (Segnati/Subiti):** {st_t['gf']:.2f} / {st_t['ga']:.2f}")
+        # Rendering HTML dei badge con st.markdown
         st.markdown(f"• **Ultime 5:** {render_form_badges(list_t)}", unsafe_allow_html=True)
+        st.caption(f"Fattore Ponderazione Forma: **x{mult_t:.2f}**")
 
     # 2. PRONOSTICO E PROBABILITÀ
     st.markdown("---")
