@@ -32,7 +32,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 🔑 INSERISCI QUI LA TUA API KEY PERSONALE DI FOOTBALL-DATA.ORG
-API_TOKEN = 2e52e41c56bc4d85b2cc3df2d03c00af
+API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
 
 @st.cache_data(ttl=1800)
 def fetch_serie_a_matches():
