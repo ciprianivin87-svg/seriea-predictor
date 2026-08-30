@@ -1,191 +1,87 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import requests
-import json
-import re
-from bs4 import BeautifulSoup
-from scipy.stats import poisson
+from datetime import date, datetime
 
-st.set_page_config(page_title="Serie A Predictor Pro", page_icon="⚽", layout="centered")
+st.set_page_config(page_title="Serie A Predictor", page_icon="⚽", layout="centered")
 
-# Visual Styling CSS (Sintetico & Card Parametri)
-st.markdown("""
-<style>
-    .main { background-color: #0f172a; }
-    .stButton>button { width: 100%; background-color: #38bdf8; color: black; font-weight: bold; border-radius: 8px; padding: 10px; }
-    .stSelectbox label { color: #f8fafc !important; font-weight: bold; }
-    .param-card {
-        background-color: #1e293b;
-        border-radius: 8px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
-        border: 1px solid #334155;
+# 1. STRUTTURA DATI: CALENDARIO GIORNATE SERIE A (Esempio date)
+# Puoi estendere questo dizionario con tutte le 38 giornate e i relativi match
+CALENDARIO_GIORNATE = {
+    1: {
+        "inizio": date(2026, 8, 22),
+        "fine": date(2026, 8, 24),
+        "partite": [
+            ("Inter", "Torino"),
+            ("Juventus", "Parma"),
+            ("Milan", "Cremonese"),
+            ("Napoli", "Sassuolo")
+        ]
+    },
+    2: {
+        "inizio": date(2026, 8, 29),
+        "fine": date(2026, 8, 31),
+        "partite": [
+            ("Lazio", "Venezia"),
+            ("Roma", "Bologna"),
+            ("Atalanta", "Pisa"),
+            ("Fiorentina", "Udinese")
+        ]
+    },
+    3: {
+        "inizio": date(2026, 9, 12),
+        "fine": date(2026, 9, 14),
+        "partite": [
+            ("Inter", "Milan"),
+            ("Juventus", "Roma"),
+            ("Napoli", "Atalanta"),
+            ("Bologna", "Lazio")
+        ]
     }
-    .param-title { font-weight: bold; color: #f8fafc; font-size: 13px; }
-    .param-desc { color: #94a3b8; font-size: 11px; margin-top: 2px; }
-</style>
-""", unsafe_allow_html=True)
-
-# METRICHE xG DI RISERVA (Per garantire il funzionamento offline)
-DATI_LOCALI = {
-    'Atalanta': {'xG_fatti': 1.90, 'xGA_subiti': 1.15},
-    'Bologna': {'xG_fatti': 1.35, 'xGA_subiti': 1.10},
-    'Cagliari': {'xG_fatti': 1.00, 'xGA_subiti': 1.40},
-    'Como': {'xG_fatti': 1.45, 'xGA_subiti': 1.25},
-    'Fiorentina': {'xG_fatti': 1.45, 'xGA_subiti': 1.20},
-    'Frosinone': {'xG_fatti': 1.05, 'xGA_subiti': 1.50},
-    'Genoa': {'xG_fatti': 1.10, 'xGA_subiti': 1.25},
-    'Inter': {'xG_fatti': 2.10, 'xGA_subiti': 0.80},
-    'Juventus': {'xG_fatti': 1.70, 'xGA_subiti': 0.85},
-    'Lazio': {'xG_fatti': 1.50, 'xGA_subiti': 1.15},
-    'Lecce': {'xG_fatti': 0.95, 'xGA_subiti': 1.40},
-    'Milan': {'xG_fatti': 1.85, 'xGA_subiti': 1.10},
-    'Monza': {'xG_fatti': 1.10, 'xGA_subiti': 1.35},
-    'Napoli': {'xG_fatti': 1.75, 'xGA_subiti': 0.95},
-    'Parma': {'xG_fatti': 1.25, 'xGA_subiti': 1.45},
-    'Roma': {'xG_fatti': 1.60, 'xGA_subiti': 1.00},
-    'Sassuolo': {'xG_fatti': 1.20, 'xGA_subiti': 1.45},
-    'Torino': {'xG_fatti': 1.15, 'xGA_subiti': 1.10},
-    'Udinese': {'xG_fatti': 1.15, 'xGA_subiti': 1.30},
-    'Venezia': {'xG_fatti': 0.95, 'xGA_subiti': 1.70}
 }
 
-# FETCHING xG DA UNDERSTAT CON FALLBACK
-@st.cache_data(ttl=3600)
-def fetch_understat_live():
-    url = "https://understat.com/league/Serie_A"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7'
-    }
+def get_giornata_corrente():
+    """Riconosce la giornata attuale in base alla data odierna."""
+    oggi = date.today()
     
-    try:
-        res = requests.get(url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.content, 'html.parser')
-            scripts = soup.find_all('script')
+    # Cerca la giornata corrispondente al periodo corrente
+    for num_giornata, info in CALENDARIO_GIORNATE.items():
+        if info["inizio"] <= oggi <= info["fine"]:
+            return num_giornata, info["partite"], "in_corso"
+    
+    # Se oggi si trova in una pausa/infrasettimanale, prende la prossima giornata disponibile
+    for num_giornata, info in CALENDARIO_GIORNATE.items():
+        if oggi < info["inizio"]:
+            return num_giornata, info["partite"], "prossima"
             
-            teams_data = {}
-            for script in scripts:
-                if script.string and 'teamsData' in script.string:
-                    match = re.search(r"JSON\.parse\('([^']+)'\)", script.string)
-                    if match:
-                        raw = match.group(1).encode('utf-8').decode('unicode-escape')
-                        teams_raw = json.loads(raw)
-                        
-                        for _, t_info in teams_raw.items():
-                            t_name = t_info['title']
-                            history = t_info['history']
-                            games = max(1, len(history))
-                            tot_xg = sum(float(x['xG']) for x in history)
-                            tot_xga = sum(float(x['xGA']) for x in history)
-                            
-                            teams_data[t_name] = {
-                                'xG_fatti': round(tot_xg / games, 2),
-                                'xGA_subiti': round(tot_xga / games, 2)
-                            }
-            if teams_data:
-                return teams_data, True
-    except Exception:
-        pass
-    
-    return DATI_LOCALI, False
+    # Default (ultima giornata se il campionato è finito)
+    ultima = max(CALENDARIO_GIORNATE.keys())
+    return ultima, CALENDARIO_GIORNATE[ultima]["partite"], "conclusa"
 
-# INTERFACCIA E LOGICA PRONOSTICO
-st.title("⚽ Serie A Analytics Engine")
-st.caption("Modello Statistico di Poisson basato su Expected Goals (xG)")
+# 2. LOGICA DELL'INTERFACCIA
+st.title("⚽ Serie A Hub")
 
-dati_squadre, is_live = fetch_understat_live()
+giornata_num, partite_giornata, stato = get_giornata_corrente()
+data_oggi_str = datetime.now().strftime("%d/%m/%Y")
 
-if is_live:
-    st.sidebar.success("🟢 xG aggiornati in tempo reale (Understat)")
-else:
-    st.sidebar.info("🔵 xG da database locale attivo")
+# Header Sezione Giornata
+st.markdown(f"### 📅 Giornata Attuale: **{giornata_num}ª Giornata**")
+st.caption(f"Data rilevata dal sistema: **{data_oggi_str}**")
 
-squadre = sorted(list(dati_squadre.keys()))
+if stato == "in_corso":
+    st.info("🔥 Giornata di campionato attualmente in svolgimento.")
+elif stato == "prossima":
+    st.warning("⏳ Prossima giornata in programma.")
 
-col1, col2 = st.columns(2)
-with col1:
-    casa = st.selectbox("Squadra CASA", squadre, index=squadre.index('Inter') if 'Inter' in squadre else 0)
-with col2:
-    trasferta = st.selectbox("Squadra TRASFERTA", squadre, index=squadre.index('Milan') if 'Milan' in squadre else min(1, len(squadre)-1))
+# 3. MOSTRA LE PARTITE DELLA GIORNATA
+st.subheader("Match in programma:")
 
-if casa == trasferta:
-    st.warning("⚠️ Seleziona due squadre diverse per analizzare il match.")
-else:
-    if st.button("🚀 CALCOLA PRONOSTICO"):
-        d_c = dati_squadre[casa]
-        d_t = dati_squadre[trasferta]
-
-        # Calcolo Poisson
-        lambda_casa = (d_c['xG_fatti'] + d_t['xGA_subiti']) / 2
-        lambda_trasferta = (d_t['xG_fatti'] + d_c['xGA_subiti']) / 2
-
-        matrice_p = np.zeros((6, 6))
-        for i in range(6):
-            for j in range(6):
-                matrice_p[i, j] = poisson.pmf(i, lambda_casa) * poisson.pmf(j, lambda_trasferta) * 100
-
-        prob_1 = np.sum(np.tril(matrice_p, -1))
-        prob_x = np.sum(np.diag(matrice_p))
-        prob_2 = np.sum(np.triu(matrice_p, 1))
-
-        g_c, g_t = np.unravel_index(np.argmax(matrice_p), matrice_p.shape)
-        prob_risultato_top = matrice_p[g_c, g_t]
-
-        # Output Risultati
-        st.markdown("---")
-        st.subheader("📊 Probabilità Esito 1X2")
-        c1, c2, c3 = st.columns(3)
-        c1.metric(f"Vittoria {casa}", f"{prob_1:.1f}%")
-        c2.metric("Pareggio (X)", f"{prob_x:.1f}%")
-        c3.metric(f"Vittoria {trasferta}", f"{prob_2:.1f}%")
-
-        st.success(f"🎯 Risultato Esatto Modellato: **{casa} {g_c} - {g_t} {trasferta}** ({prob_risultato_top:.1f}% di probabilità)")
-
-# SEZIONE PARAMETRI DI MODELLO (IN BASSO)
-st.markdown("---")
-st.subheader("📌 Parametri Analizzati nel Modello")
-
-p_col1, p_col2 = st.columns(2)
-
-with p_col1:
-    st.markdown("""
-    <div class="param-card">
-        <div class="param-title">📊 Forma Recente</div>
-        <div class="param-desc">Trend prestazionale e xG generati nelle ultime 5 giornate.</div>
-    </div>
-    <div class="param-card">
-        <div class="param-title">🏠 Fattore Casa/Trasferta</div>
-        <div class="param-desc">Rendimento ponderato tra campo di casa e trasferta.</div>
-    </div>
-    <div class="param-card">
-        <div class="param-title">⚽ Gol Fatti e Subiti</div>
-        <div class="param-desc">Media gol reali rispetto al volume di xG prodotti e concessi.</div>
-    </div>
-    <div class="param-card">
-        <div class="param-title">📈 Scontri Diretti</div>
-        <div class="param-desc">Storico dei precedenti e scontri recenti tra le due squadre.</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with p_col2:
-    st.markdown("""
-    <div class="param-card">
-        <div class="param-title">🟥 Assenze, Infortuni e Squalifiche</div>
-        <div class="param-desc">Peso delle assenze chiave sul tasso di efficienza complessivo.</div>
-    </div>
-    <div class="param-card">
-        <div class="param-title">🔢 Probabilità Statistica</div>
-        <div class="param-desc">Distribuzione matematica di Poisson calcolata analiticamente.</div>
-    </div>
-    <div class="param-card">
-        <div class="param-title">🏆 Classifica Aggiornata</div>
-        <div class="param-desc">Posizione e motivazioni di classifica nello scontro diretto.</div>
-    </div>
-    <div class="param-card">
-        <div class="param-title">📅 Prossime Partite</div>
-        <div class="param-desc">Gestione delle turnazioni e impegni ravvicinati (es. coppe).</div>
-    </div>
-    """, unsafe_allow_html=True)
+for casa, trasferta in partite_giornata:
+    st.markdown(
+        f"""
+        <div style="background-color: #1e293b; padding: 12px 20px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #38bdf8; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: bold; color: #f8fafc; font-size: 16px;">{casa}</span>
+            <span style="color: #94a3b8; font-weight: bold;">VS</span>
+            <span style="font-weight: bold; color: #f8fafc; font-size: 16px;">{trasferta}</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
