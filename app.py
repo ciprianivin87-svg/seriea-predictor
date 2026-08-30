@@ -4,7 +4,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="Serie A Hub", page_icon="⚽", layout="centered")
 
-# Styling CSS per le schede delle partite
+# CSS Styling per le schede delle partite
 st.markdown("""
 <style>
     .main { background-color: #0f172a; }
@@ -18,7 +18,7 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
     }
-    .team-name { font-weight: bold; color: #f8fafc; font-size: 16px; width: 40%; }
+    .team-name { font-weight: bold; color: #f8fafc; font-size: 15px; width: 40%; }
     .vs-badge { 
         color: #38bdf8; 
         font-weight: bold; 
@@ -27,16 +27,16 @@ st.markdown("""
         padding: 4px 10px; 
         border-radius: 6px; 
     }
-    .match-date { color: #94a3b8; font-size: 12px; margin-top: 4px; }
+    .match-date { color: #94a3b8; font-size: 11px; margin-top: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
-# API KEY GRATUITA (Sostituisci con la tua chiave se ne possiedi una per limiti di rateo più alti)
-API_TOKEN = "e87cf7a0bb91419a8bc4a5ec409d5872"  # Token demo pubblico/test per football-data.org
+# 🔑 INSERISCI QUI LA TUA API KEY PERSONALE DI FOOTBALL-DATA.ORG
+API_TOKEN = 2e52e41c56bc4d85b2cc3df2d03c00af
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=1800)
 def fetch_serie_a_matches():
-    """Recupera la giornata corrente e le partite dal provider API live."""
+    """Recupera la giornata corrente e le partite della Serie A tramite API."""
     url = "https://api.football-data.org/v4/competitions/SA/matches"
     headers = {"X-Auth-Token": API_TOKEN}
     
@@ -46,33 +46,36 @@ def fetch_serie_a_matches():
             data = response.json()
             matches = data.get("matches", [])
             
-            # Identifica la giornata corrente attiva o più vicina
-            current_matchday = 1
-            for match in matches:
-                if match.get("status") in ["IN_PLAY", "PAUSED"]:
-                    current_matchday = match.get("matchday")
-                    break
-                elif match.get("status") == "TIMED":
-                    match_date = datetime.strptime(match["utcDate"], "%Y-%m-%dT%H:%M:%SZ")
-                    if match_date >= datetime.utcnow():
+            # Recupera la giornata corrente della competizione
+            current_matchday = None
+            if matches:
+                # Trova la prima partita in programma o in corso
+                for match in matches:
+                    if match.get("status") in ["IN_PLAY", "PAUSED", "TIMED"]:
                         current_matchday = match.get("matchday")
                         break
-            
-            # Filtra le partite appartenenti alla giornata individuata
-            giornata_partite = [m for m in matches if m.get("matchday") == current_matchday]
-            return current_matchday, giornata_partite, True
-    except Exception as e:
-        pass
-    
-    return None, [], False
+                
+                # Se tutte le partite estratte sono terminate, prende l'ultima giornata disputata
+                if not current_matchday:
+                    current_matchday = matches[-1].get("matchday")
 
-# INTERFACCIA UTENTE
+            giornata_partite = [m for m in matches if m.get("matchday") == current_matchday]
+            return current_matchday, giornata_partite, True, "OK"
+        else:
+            return None, [], False, f"Errore API: Codice {response.status_code}"
+    except Exception as e:
+        return None, [], False, f"Eccezione: {str(e)}"
+
+# INTERFACCIA PRINCIPALE
 st.title("⚽ Serie A Hub")
 
-with st.spinner("Connessione ai server del campionato in corso..."):
-    giornata, partite, successo = fetch_serie_a_matches()
+if API_TOKEN == "INSERISCI_QUI_LA_TUA_API_KEY":
+    st.warning("⚠️ Inserisci la tua API Key personale di football-data.org nel codice per abilitare la connessione live.")
+
+giornata, partite, successo, messaggio = fetch_serie_a_matches()
 
 if successo and giornata:
+    st.sidebar.success("🟢 Connessione API attiva (Serie A)")
     st.markdown(f"### 📅 Giornata Attuale: **{giornata}ª Giornata**")
     st.caption(f"Data di oggi: **{datetime.now().strftime('%d/%m/%Y')}**")
     st.markdown("---")
@@ -81,16 +84,18 @@ if successo and giornata:
         casa = match["homeTeam"]["name"]
         trasferta = match["awayTeam"]["name"]
         
-        # Formattazione orario/data partita
-        utc_time = datetime.strptime(match["utcDate"], "%Y-%m-%dT%H:%M:%SZ")
-        data_ora_str = utc_time.strftime("%d/%m/%Y alle %H:%M")
+        # Gestione orari UTC -> Stringa formattata
+        try:
+            utc_time = datetime.strptime(match["utcDate"], "%Y-%m-%dT%H:%M:%SZ")
+            data_ora_str = utc_time.strftime("%d/%m/%Y alle %H:%M")
+        except ValueError:
+            data_ora_str = match["utcDate"]
         
-        # Risultato se partita già iniziata o conclusa
         status = match["status"]
         if status in ["FINISHED", "IN_PLAY", "PAUSED"]:
-            score_home = match["score"]["fullTime"]["home"]
-            score_away = match["score"]["fullTime"]["away"]
-            badge_text = f"{score_home} - {score_away}"
+            score_h = match["score"]["fullTime"]["home"]
+            score_a = match["score"]["fullTime"]["away"]
+            badge_text = f"{score_h} - {score_a}"
         else:
             badge_text = "VS"
 
@@ -108,4 +113,4 @@ if successo and giornata:
             unsafe_allow_html=True
         )
 else:
-    st.error("Impossibile recuperare i dati live in questo momento. Verificare la connessione di rete.")
+    st.error(f"Impossibile caricare le partite: {messaggio}")
