@@ -86,31 +86,61 @@ def fetch_serie_a_matches():
         pass
     return None, [], False
 
-@st.cache_data(ttl=3600)
-def fetch_team_stats():
-    """Recupera la classifica e le metriche di rendimento dei club."""
-    url = "https://api.football-data.org/v4/competitions/SA/standings"
+@st.cache_data(ttl=1800)
+def fetch_team_stats_and_form():
+    """Recupera la classifica e calcola la forma reale dalle ultime partite giocate."""
+    url_standings = "https://api.football-data.org/v4/competitions/SA/standings"
+    url_matches = "https://api.football-data.org/v4/competitions/SA/matches"
+    
     stats = {}
+    
     try:
-        response = requests.get(url, headers=HEADERS, timeout=8)
-        if response.status_code == 200:
-            data = response.json()
-            standings = data["standings"][0]["table"]
-            
+        resp_s = requests.get(url_standings, headers=HEADERS, timeout=8)
+        if resp_s.status_code == 200:
+            standings = resp_s.json()["standings"][0]["table"]
             for row in standings:
-                team_name = row["team"]["name"]
+                t_name = row["team"]["name"]
                 played = max(1, row["playedGames"])
-                stats[team_name] = {
+                stats[t_name] = {
                     "pos": row["position"],
                     "punti": row["points"],
                     "gf": row["goalsFor"] / played,
                     "ga": row["goalsAgainst"] / played,
                     "tot_gf": row["goalsFor"],
                     "tot_ga": row["goalsAgainst"],
-                    "form": row.get("form", "W,D,L,W,D")
+                    "form_list": []
                 }
+        
+        resp_m = requests.get(url_matches, headers=HEADERS, timeout=8)
+        if resp_m.status_code == 200:
+            all_matches = resp_m.json().get("matches", [])
+            finished_matches = [m for m in all_matches if m.get("status") == "FINISHED"]
+            
+            for team in stats.keys():
+                team_results = []
+                for m in reversed(finished_matches):
+                    home = m["homeTeam"]["name"]
+                    away = m["awayTeam"]["name"]
+                    score_h = m["score"]["fullTime"]["home"]
+                    score_a = m["score"]["fullTime"]["away"]
+
+                    if home == team:
+                        if score_h > score_a: team_results.append("W")
+                        elif score_h == score_a: team_results.append("D")
+                        else: team_results.append("L")
+                    elif away == team:
+                        if score_a > score_h: team_results.append("W")
+                        elif score_a == score_h: team_results.append("D")
+                        else: team_results.append("L")
+                    
+                    if len(team_results) == 5:
+                        break
+                
+                stats[team]["form_list"] = list(reversed(team_results))
+
     except Exception:
         pass
+        
     return stats
 
 @st.cache_data(ttl=3600)
@@ -138,41 +168,23 @@ def fetch_top_scorers():
         pass
     return scorers_by_team
 
-def calcola_moltiplicatore_forma(form_str):
-    """Calcola il moltiplicatore di forma basato sulle ultime 5 partite."""
-    if not form_str or not isinstance(form_str, str) or form_str == "N/A":
-        return 1.0, ["D", "D", "D", "D", "D"]  # Fallback di default
-    
-    # Pulisce la stringa rimuovendo spazi e splitta per virgola
-    risultati = [r.strip().upper() for r in form_str.split(",") if r.strip()]
-    
-    # Prende solo gli ultimi 5 risultati
-    ultimi_5 = risultati[-5:] if len(risultati) >= 5 else risultati
+def calcola_moltiplicatore_forma(form_list):
+    """Calcola il moltiplicatore di forma basato sulla lista dei risultati (W/D/L)."""
+    if not form_list:
+        return 1.0, []
     
     modificatore = 0.0
-    for r in ultimi_5:
+    for r in form_list:
         if r == "W":
             modificatore += 0.05
         elif r == "L":
             modificatore -= 0.05
 
     moltiplicatore = max(0.7, min(1.3, 1.0 + modificatore))
-    return moltiplicatore, ultimi_5
-
-def render_form_badges(form_list):
-    """Genera l'HTML per mostrare i badge visuali della forma (W/D/L)."""
-    if not form_list:
-        return '<span style="color: #94a3b8; font-size: 12px;">Dati non disponibili</span>'
-    
-    html = ""
-    for r in form_list:
-        # Mappatura per sicurezze se l'API invia caratteri inattesi
-        badge_class = r if r in ["W", "D", "L"] else "D"
-        html += f'<span class="form-badge form-{badge_class}">{r}</span>'
-    return html
+    return moltiplicatore, form_list
 
 def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, form_trasferta):
-    """Calcola le probabilità 1X2 e il risultato esatto."""
+    """Calcola le probabilità 1X2 e il risultato esatto pesando la forma recente."""
     mult_c, _ = calcola_moltiplicatore_forma(form_casa)
     mult_t, _ = calcola_moltiplicatore_forma(form_trasferta)
 
@@ -200,9 +212,13 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
 
 def render_form_badges(form_list):
     """Genera l'HTML per mostrare i badge visuali della forma (W/D/L)."""
+    if not form_list:
+        return '<span style="color: #94a3b8; font-size: 12px;">Dati non disponibili</span>'
+    
     html = ""
     for r in form_list:
-        html += f'<span class="form-badge form-{r}">{r}</span>'
+        badge_class = r if r in ["W", "D", "L"] else "D"
+        html += f'<span class="form-badge form-{badge_class}">{r}</span>'
     return html
 
 # --- LAYOUT APPLICAZIONE ---
@@ -210,7 +226,7 @@ def render_form_badges(form_list):
 st.title("⚽ Serie A Hub & Predictor")
 
 giornata, partite, successo = fetch_serie_a_matches()
-stats_squadre = fetch_team_stats()
+stats_squadre = fetch_team_stats_and_form()
 classifica_marcatori = fetch_top_scorers()
 
 if successo and giornata:
@@ -249,11 +265,11 @@ if successo and giornata:
     # 1. SCHEDA CONFRONTO STATISTICO E FORMA
     st.subheader("📊 Dettagli e Stato di Forma")
     
-    st_c = stats_squadre.get(casa, {"pos": "-", "punti": 0, "gf": 1.2, "ga": 1.1, "tot_gf": 15, "form": "W,D,L,W,D"})
-    st_t = stats_squadre.get(trasferta, {"pos": "-", "punti": 0, "gf": 1.1, "ga": 1.2, "tot_gf": 12, "form": "D,L,W,D,L"})
+    st_c = stats_squadre.get(casa, {"pos": "-", "punti": 0, "gf": 1.2, "ga": 1.1, "tot_gf": 15, "form_list": []})
+    st_t = stats_squadre.get(trasferta, {"pos": "-", "punti": 0, "gf": 1.1, "ga": 1.2, "tot_gf": 12, "form_list": []})
 
-    mult_c, list_c = calcola_moltiplicatore_forma(st_c.get("form", ""))
-    mult_t, list_t = calcola_moltiplicatore_forma(st_t.get("form", ""))
+    mult_c, list_c = calcola_moltiplicatore_forma(st_c.get("form_list", []))
+    mult_t, list_t = calcola_moltiplicatore_forma(st_t.get("form_list", []))
 
     col1, col2 = st.columns(2)
 
@@ -261,7 +277,6 @@ if successo and giornata:
         st.markdown(f"#### 🏠 {casa}")
         st.write(f"• **Posizione in classifica:** {st_c['pos']}° ({st_c['punti']} pt)")
         st.write(f"• **Media Gol (Segnati/Subiti):** {st_c['gf']:.2f} / {st_c['ga']:.2f}")
-        # Rendering HTML dei badge con st.markdown
         st.markdown(f"• **Ultime 5:** {render_form_badges(list_c)}", unsafe_allow_html=True)
         st.caption(f"Fattore Ponderazione Forma: **x{mult_c:.2f}**")
 
@@ -269,7 +284,6 @@ if successo and giornata:
         st.markdown(f"#### ✈️ {trasferta}")
         st.write(f"• **Posizione in classifica:** {st_t['pos']}° ({st_t['punti']} pt)")
         st.write(f"• **Media Gol (Segnati/Subiti):** {st_t['gf']:.2f} / {st_t['ga']:.2f}")
-        # Rendering HTML dei badge con st.markdown
         st.markdown(f"• **Ultime 5:** {render_form_badges(list_t)}", unsafe_allow_html=True)
         st.caption(f"Fattore Ponderazione Forma: **x{mult_t:.2f}**")
 
@@ -278,8 +292,8 @@ if successo and giornata:
     st.subheader("🔮 Pronostico Algoritmetico Pesato")
 
     prob_1, prob_x, prob_2, g_c, g_t, prob_exact, exp_c, exp_t = calcola_pronostico(
-        st_c["gf"], st_c["ga"], st_c["form"],
-        st_t["gf"], st_t["ga"], st_t["form"]
+        st_c["gf"], st_c["ga"], list_c,
+        st_t["gf"], st_t["ga"], list_t
     )
 
     st.markdown(
@@ -321,7 +335,7 @@ if successo and giornata:
         st.markdown(f"**Top Player {casa}**")
         players_c = classifica_marcatori.get(casa, [])
         if players_c:
-            for p in players_c[:2]:  # Mostra fino ai 2 marcatori principali
+            for p in players_c[:2]:
                 tot_goals = p['goals']
                 tot_team_gf = max(1, st_c['tot_gf'])
                 quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
@@ -340,7 +354,7 @@ if successo and giornata:
                     unsafe_allow_html=True
                 )
         else:
-            st.caption("Dati sui marcatori principali non disponibili per questa squadra.")
+            st.caption("Dati marcatori non disponibili per questo club.")
 
     with p_col2:
         st.markdown(f"**Top Player {trasferta}**")
@@ -365,7 +379,7 @@ if successo and giornata:
                     unsafe_allow_html=True
                 )
         else:
-            st.caption("Dati sui marcatori principali non disponibili per questa squadra.")
+            st.caption("Dati marcatori non disponibili per questo club.")
 
 else:
     st.error("Impossibile caricare le informazioni live dalla Serie A.")
