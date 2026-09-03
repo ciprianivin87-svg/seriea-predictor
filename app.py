@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import numpy as np
+import pandas as pd
 from datetime import datetime
 from scipy.stats import poisson
 
@@ -61,6 +62,13 @@ st.markdown("""
 API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
 HEADERS = {"X-Auth-Token": API_TOKEN}
 
+# Stato della sessione per la classifica
+if "show_standings" not in st.session_state:
+    st.session_state.show_standings = False
+
+def toggle_standings():
+    st.session_state.show_standings = not st.session_state.show_standings
+
 @st.cache_data(ttl=1800)
 def fetch_serie_a_matches():
     """Recupera la giornata corrente e le partite della Serie A."""
@@ -88,11 +96,12 @@ def fetch_serie_a_matches():
 
 @st.cache_data(ttl=1800)
 def fetch_team_stats_and_form():
-    """Recupera la classifica e calcola la forma reale dalle ultime partite giocate."""
+    """Recupera la classifica dettagliata e calcola la forma reale."""
     url_standings = "https://api.football-data.org/v4/competitions/SA/standings"
     url_matches = "https://api.football-data.org/v4/competitions/SA/matches"
     
     stats = {}
+    standings_table = []
     
     try:
         resp_s = requests.get(url_standings, headers=HEADERS, timeout=8)
@@ -101,6 +110,21 @@ def fetch_team_stats_and_form():
             for row in standings:
                 t_name = row["team"]["name"]
                 played = max(1, row["playedGames"])
+                
+                # Tabella per la classifica completa
+                standings_table.append({
+                    "Pos": row["position"],
+                    "Squadra": t_name,
+                    "PT": row["points"],
+                    "G": row["playedGames"],
+                    "V": row["won"],
+                    "N": row["draw"],
+                    "P": row["lost"],
+                    "GF": row["goalsFor"],
+                    "GS": row["goalsAgainst"],
+                    "DR": row["goalDifference"]
+                })
+
                 stats[t_name] = {
                     "pos": row["position"],
                     "punti": row["points"],
@@ -141,7 +165,7 @@ def fetch_team_stats_and_form():
     except Exception:
         pass
         
-    return stats
+    return stats, standings_table
 
 @st.cache_data(ttl=3600)
 def fetch_top_scorers():
@@ -223,11 +247,42 @@ def render_form_badges(form_list):
 
 # --- LAYOUT APPLICAZIONE ---
 
-st.title("⚽ Serie A Hub & Predictor")
+# Intestazione con pulsante Classifica a destra
+col_title, col_btn = st.columns([3, 1])
+
+with col_title:
+    st.title("⚽ Serie A Hub")
+
+with col_btn:
+    st.write("") # Spaziatore
+    lbl_btn = "❌ Chiudi Classifica" if st.session_state.show_standings else "📊 Classifica"
+    st.button(lbl_btn, on_click=toggle_standings, use_container_width=True)
 
 giornata, partite, successo = fetch_serie_a_matches()
-stats_squadre = fetch_team_stats_and_form()
+stats_squadre, classifica_completa = fetch_team_stats_and_form()
 classifica_marcatori = fetch_top_scorers()
+
+# SEZIONE CLASSIFICA COMPLETA (mostrata se cliccato il tasto)
+if st.session_state.show_standings:
+    st.markdown("---")
+    st.subheader("🏆 Classifica Serie A Aggiornata")
+    if classifica_completa:
+        df_standings = pd.DataFrame(classifica_completa)
+        st.dataframe(
+            df_standings,
+            column_config={
+                "Pos": st.column_config.NumberColumn("Pos", format="%d°"),
+                "Squadra": "Squadra",
+                "PT": st.column_config.NumberColumn("Punti", format="%d"),
+                "G": "G", "V": "V", "N": "N", "P": "P",
+                "GF": "GF", "GS": "GS", "DR": "DR"
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.warning("Classifica temporaneamente non disponibile.")
+    st.markdown("---")
 
 if successo and giornata:
     st.markdown(f"### 📅 **{giornata}ª Giornata di Serie A**")
