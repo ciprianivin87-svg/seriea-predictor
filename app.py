@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from scipy.stats import poisson
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Serie A Predictor", page_icon="⚽", layout="centered")
 
@@ -79,7 +80,6 @@ def fetch_all_serie_a_matches():
             data = response.json()
             matches = data.get("matches", [])
             
-            # Individua la giornata corrente/più recente
             current_matchday = 1
             for match in matches:
                 if match.get("status") in ["IN_PLAY", "PAUSED", "TIMED"]:
@@ -230,7 +230,7 @@ def calcola_moltiplicatore_forma(form_list):
     return moltiplicatore, form_list
 
 def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, form_trasferta):
-    """Calcola le probabilità 1X2 e il risultato esatto pesando la forma recente."""
+    """Calcola le probabilità 1X2, la matrice di Poisson e il risultato esatto."""
     mult_c, _ = calcola_moltiplicatore_forma(form_casa)
     mult_t, _ = calcola_moltiplicatore_forma(form_trasferta)
 
@@ -254,7 +254,49 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
     g_c, g_t = np.unravel_index(np.argmax(matrice_p), matrice_p.shape)
     prob_exact = matrice_p[g_c, g_t]
 
-    return prob_1, prob_x, prob_2, g_c, g_t, prob_exact, lambda_casa, lambda_trasferta
+    return prob_1, prob_x, prob_2, g_c, g_t, prob_exact, lambda_casa, lambda_trasferta, matrice_p
+
+def genera_plotly_heatmap(matrice_p, squadra_casa, squadra_trasferta):
+    """Genera una matrice Heatmap interattiva con Plotly per i risultati esatti."""
+    gol_labels = ["0", "1", "2", "3", "4", "5"]
+    
+    # Annotazioni per visualizzare la % dentro ogni casella
+    annotations = []
+    for i in range(6):
+        for j in range(6):
+            val = matrice_p[i, j]
+            annotations.append(
+                dict(
+                    x=gol_labels[j],
+                    y=gol_labels[i],
+                    text=f"{val:.1f}%",
+                    font=dict(color="white" if val < np.max(matrice_p)*0.7 else "black", size=11, family="sans-serif"),
+                    showarrow=False
+                )
+            )
+
+    fig = go.Figure(data=go.Heatmap(
+        z=matrice_p,
+        x=gol_labels,
+        y=gol_labels,
+        colorscale='Viridis',
+        hoverinfo='x+y+z',
+        hovertemplate=f'Gol {squadra_casa}: %{{y}}<br>Gol {squadra_trasferta}: %{{x}}<br>Probabilità: %{{z:.2f}}%<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=f"<b>Matrice Probabilità Risultati Esatti</b><br><sup>{squadra_casa} (Righe) vs {squadra_trasferta} (Colonne)</sup>",
+        title_x=0.5,
+        title_font=dict(size=15, color="#f8fafc"),
+        xaxis=dict(title=f"Gol {squadra_trasferta}", title_font=dict(color="#94a3b8"), tickfont=dict(color="#f8fafc")),
+        yaxis=dict(title=f"Gol {squadra_casa}", title_font=dict(color="#94a3b8"), tickfont=dict(color="#f8fafc"), autorange='reversed'),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        annotations=annotations,
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=400
+    )
+    return fig
 
 def render_form_badges(form_list):
     """Genera l'HTML per mostrare i badge visuali della forma (W/D/L)."""
@@ -287,7 +329,6 @@ classifica_marcatori, marcatori_completi_list = fetch_top_scorers()
 if st.session_state.show_standings:
     st.markdown("---")
     
-    # Selettore tra Classifica Campionato e Classifica Marcatori
     tipo_classifica = st.radio(
         "Scegli quale classifica visualizzare:",
         options=["🏆 Classifica Serie A Aggiornata", "⚽ Classifica Marcatori Completa"],
@@ -437,7 +478,7 @@ if successo and tutte_le_partite:
         st.markdown("---")
         st.subheader("🔮 Pronostico Algoritmetico Pesato")
 
-        prob_1, prob_x, prob_2, g_c, g_t, prob_exact, exp_c, exp_t = calcola_pronostico(
+        prob_1, prob_x, prob_2, g_c, g_t, prob_exact, exp_c, exp_t, matrice_p = calcola_pronostico(
             st_c["gf"], st_c["ga"], list_c,
             st_t["gf"], st_t["ga"], list_t
         )
@@ -469,6 +510,10 @@ if successo and tutte_le_partite:
         )
 
         st.progress(int(prob_1), text=f"Distribuzione pronostico (1: {prob_1:.0f}% | X: {prob_x:.0f}% | 2: {prob_2:.0f}%)")
+
+        # 📈 GRAFICO HEATMAP CON PLOTLY
+        fig_heatmap = genera_plotly_heatmap(matrice_p, casa, trasferta)
+        st.plotly_chart(fig_heatmap, use_container_width=True)
 
         # 3. GIOCATORI CHIAVE DA MONITORARE
         st.markdown("---")
