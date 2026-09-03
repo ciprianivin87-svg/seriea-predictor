@@ -62,7 +62,7 @@ st.markdown("""
 API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
 HEADERS = {"X-Auth-Token": API_TOKEN}
 
-# Stato della sessione per la classifica
+# Stato della sessione per la sezione Classifiche
 if "show_standings" not in st.session_state:
     st.session_state.show_standings = False
 
@@ -86,7 +86,6 @@ def fetch_all_serie_a_matches():
                     current_matchday = match.get("matchday", 1)
                     break
             else:
-                # Se non ci sono partite programmate o in corso, individua l'ultima giocata
                 finished = [m.get("matchday") for m in matches if m.get("status") == "FINISHED"]
                 if finished:
                     current_matchday = max(finished)
@@ -277,222 +276,45 @@ with col_title:
 
 with col_btn:
     st.write("")
-    lbl_btn = "❌ Chiudi Classifica" if st.session_state.show_standings else "📊 Classifica"
+    lbl_btn = "❌ Chiudi Classifiche" if st.session_state.show_standings else "📊 Classifiche"
     st.button(lbl_btn, on_click=toggle_standings, use_container_width=True)
 
 tutte_le_partite, giornata_corrente, successo = fetch_all_serie_a_matches()
 stats_squadre, classifica_completa = fetch_team_stats_and_form()
 classifica_marcatori, marcatori_completi_list = fetch_top_scorers()
 
-# SEZIONE CLASSIFICA COMPLETA
+# SEZIONE CLASSIFICHE (Visibile solo se si preme il pulsante "Classifiche")
 if st.session_state.show_standings:
     st.markdown("---")
-    st.subheader("🏆 Classifica Serie A Aggiornata")
-    if classifica_completa:
-        df_standings = pd.DataFrame(classifica_completa)
-        st.dataframe(
-            df_standings,
-            column_config={
-                "Pos": st.column_config.NumberColumn("Pos", format="%d°"),
-                "Squadra": "Squadra",
-                "PT": st.column_config.NumberColumn("Punti", format="%d"),
-                "G": "G", "V": "V", "N": "N", "P": "P",
-                "GF": "GF", "GS": "GS", "DR": "DR"
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-    else:
-        st.warning("Classifica temporaneamente non disponibile.")
-    st.markdown("---")
-
-if successo and tutte_le_partite:
-    # 🗓️ SELETTORE DELLA GIORNATA
-    col_giornata, col_info = st.columns([2, 2])
-    with col_giornata:
-        giornata_selezionata = st.selectbox(
-            "🗓️ **Seleziona la Giornata:**",
-            options=list(range(1, 39)),
-            index=int(giornata_corrente - 1)
-        )
     
-    with col_info:
-        st.write("")
-        st.write("")
-        if giornata_selezionata == giornata_corrente:
-            st.caption("🔴 **Giornata Corrente**")
-        elif giornata_selezionata < giornata_corrente:
-            st.caption("📜 **Giornata Passata** (Scontri già conclusi)")
+    # Selettore tra Classifica Campionato e Classifica Marcatori
+    tipo_classifica = st.radio(
+        "Scegli quale classifica visualizzare:",
+        options=["🏆 Classifica Serie A Aggiornata", "⚽ Classifica Marcatori Completa"],
+        horizontal=True
+    )
+    
+    if tipo_classifica == "🏆 Classifica Serie A Aggiornata":
+        st.subheader("🏆 Classifica Serie A")
+        if classifica_completa:
+            df_standings = pd.DataFrame(classifica_completa)
+            st.dataframe(
+                df_standings,
+                column_config={
+                    "Pos": st.column_config.NumberColumn("Pos", format="%d°"),
+                    "Squadra": "Squadra",
+                    "PT": st.column_config.NumberColumn("Punti", format="%d"),
+                    "G": "G", "V": "V", "N": "N", "P": "P",
+                    "GF": "GF", "GS": "GS", "DR": "DR"
+                },
+                hide_index=True,
+                use_container_width=True
+            )
         else:
-            st.caption("🔮 **Giornata Futura** (Prossimi incontri)")
+            st.warning("Classifica temporaneamente non disponibile.")
 
-    # Filtra partite per la giornata selezionata
-    partite_giornata = [m for m in tutte_le_partite if m.get("matchday") == giornata_selezionata]
-
-    # STRUTTURA A TAB
-    tab_match, tab_scorers = st.tabs(["🔮 Analisi Partita", "⚽ Classifica Marcatori Completa"])
-
-    # TAB 1: ANALISI E PRONOSTICI PARTITA
-    with tab_match:
-        if partite_giornata:
-            opzioni_match = {
-                f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}": m 
-                for m in partite_giornata
-            }
-            
-            partita_selezionata = st.selectbox(
-                "🔍 Seleziona la partita da analizzare:",
-                options=list(opzioni_match.keys())
-            )
-
-            match = opzioni_match[partita_selezionata]
-            casa = match["homeTeam"]["name"]
-            trasferta = match["awayTeam"]["name"]
-
-            try:
-                utc_time = datetime.strptime(match["utcDate"], "%Y-%m-%dT%H:%M:%SZ")
-                data_ora_str = utc_time.strftime("%d/%m/%Y alle %H:%M")
-            except ValueError:
-                data_ora_str = match["utcDate"]
-
-            status = match["status"]
-            if status == "FINISHED":
-                score_h = match["score"]["fullTime"]["home"]
-                score_a = match["score"]["fullTime"]["away"]
-                risultato_str = f"✅ **Risultato Finale Reale: {score_h} - {score_a}** (Giocata il {data_ora_str})"
-            elif status in ["IN_PLAY", "PAUSED"]:
-                score_h = match["score"]["fullTime"]["home"]
-                score_a = match["score"]["fullTime"]["away"]
-                risultato_str = f"🔴 **Risultato Live: {score_h} - {score_a}**"
-            else:
-                risultato_str = f"📅 Programmata per il: **{data_ora_str}**"
-
-            st.info(risultato_str)
-
-            # 1. SCHEDA CONFRONTO STATISTICO E FORMA
-            st.subheader("📊 Dettagli e Stato di Forma")
-            
-            st_c = stats_squadre.get(casa, {"pos": "-", "punti": 0, "gf": 1.2, "ga": 1.1, "tot_gf": 15, "form_list": []})
-            st_t = stats_squadre.get(trasferta, {"pos": "-", "punti": 0, "gf": 1.1, "ga": 1.2, "tot_gf": 12, "form_list": []})
-
-            mult_c, list_c = calcola_moltiplicatore_forma(st_c.get("form_list", []))
-            mult_t, list_t = calcola_moltiplicatore_forma(st_t.get("form_list", []))
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.markdown(f"#### 🏠 {casa}")
-                st.write(f"• **Posizione in classifica:** {st_c['pos']}° ({st_c['punti']} pt)")
-                st.write(f"• **Media Gol (Segnati/Subiti):** {st_c['gf']:.2f} / {st_c['ga']:.2f}")
-                st.markdown(f"• **Ultime 5:** {render_form_badges(list_c)}", unsafe_allow_html=True)
-                st.caption(f"Fattore Ponderazione Forma: **x{mult_c:.2f}**")
-
-            with col2:
-                st.markdown(f"#### ✈️ {trasferta}")
-                st.write(f"• **Posizione in classifica:** {st_t['pos']}° ({st_t['punti']} pt)")
-                st.write(f"• **Media Gol (Segnati/Subiti):** {st_t['gf']:.2f} / {st_t['ga']:.2f}")
-                st.markdown(f"• **Ultime 5:** {render_form_badges(list_t)}", unsafe_allow_html=True)
-                st.caption(f"Fattore Ponderazione Forma: **x{mult_t:.2f}**")
-
-            # 2. PRONOSTICO E PROBABILITÀ
-            st.markdown("---")
-            st.subheader("🔮 Pronostico Algoritmetico Pesato")
-
-            prob_1, prob_x, prob_2, g_c, g_t, prob_exact, exp_c, exp_t = calcola_pronostico(
-                st_c["gf"], st_c["ga"], list_c,
-                st_t["gf"], st_t["ga"], list_t
-            )
-
-            st.markdown(
-                f"""
-                <div class="stat-card">
-                    <div class="vs-header">🎯 Risultato Stimato: {casa} {g_c} - {g_t} {trasferta}</div>
-                    <div style="text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 15px;">
-                        Probabilità del punteggio esatto: <b>{prob_exact:.1f}%</b>
-                    </div>
-                    <div class="metric-container">
-                        <div class="metric-box">
-                            <div class="metric-title">Vittoria {casa} (1)</div>
-                            <div class="metric-value">{prob_1:.1f}%</div>
-                        </div>
-                        <div class="metric-box">
-                            <div class="metric-title">Pareggio (X)</div>
-                            <div class="metric-value">{prob_x:.1f}%</div>
-                        </div>
-                        <div class="metric-box">
-                            <div class="metric-title">Vittoria {trasferta} (2)</div>
-                            <div class="metric-value">{prob_2:.1f}%</div>
-                        </div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            st.progress(int(prob_1), text=f"Distribuzione pronostico (1: {prob_1:.0f}% | X: {prob_x:.0f}% | 2: {prob_2:.0f}%)")
-
-            # 3. GIOCATORI CHIAVE DA MONITORARE
-            st.markdown("---")
-            st.subheader("⭐ Giocatori Chiave da Monitorare")
-
-            p_col1, p_col2 = st.columns(2)
-
-            with p_col1:
-                st.markdown(f"**Top Player {casa}**")
-                players_c = classifica_marcatori.get(casa, [])
-                if players_c:
-                    for p in players_c[:2]:
-                        tot_goals = p['goals']
-                        tot_team_gf = max(1, st_c['tot_gf'])
-                        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
-                        prob_marcatore = (1 - poisson.pmf(0, exp_c * quota_gol)) * 100
-                        
-                        st.markdown(
-                            f"""
-                            <div class="player-card">
-                                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}</div>
-                                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
-                                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.caption("Dati marcatori non disponibili per questo club.")
-
-            with p_col2:
-                st.markdown(f"**Top Player {trasferta}**")
-                players_t = classifica_marcatori.get(trasferta, [])
-                if players_t:
-                    for p in players_t[:2]:
-                        tot_goals = p['goals']
-                        tot_team_gf = max(1, st_t['tot_gf'])
-                        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
-                        prob_marcatore = (1 - poisson.pmf(0, exp_t * quota_gol)) * 100
-                        
-                        st.markdown(
-                            f"""
-                            <div class="player-card">
-                                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}</div>
-                                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
-                                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.caption("Dati marcatori non disponibili per questo club.")
-        else:
-            st.warning(f"Nessuna partita trovata per la {giornata_selezionata}ª giornata.")
-
-    # TAB 2: CLASSIFICA MARCATORI COMPLETA
-    with tab_scorers:
+    elif tipo_classifica == "⚽ Classifica Marcatori Completa":
         st.subheader("🥇 Classifica Marcatori Serie A")
-        
         if marcatori_completi_list:
             df_marcatori = pd.DataFrame(marcatori_completi_list)
 
@@ -501,7 +323,7 @@ if successo and tutte_le_partite:
                 search_player = st.text_input("🔍 Cerca giocatore:", placeholder="Es. Lautaro, Vlahovic...")
             with col_f2:
                 squadre_disponibili = ["Tutte le squadre"] + sorted(list(set(df_marcatori["Squadra"])))
-                selected_team = st.selectbox("Filtrati per squadra:", squadre_disponibili)
+                selected_team = st.selectbox("Filtra per squadra:", squadre_disponibili)
 
             df_filtrato = df_marcatori.copy()
             if selected_team != "Tutte le squadre":
@@ -526,6 +348,185 @@ if successo and tutte_le_partite:
             )
         else:
             st.warning("Dati dei marcatori al momento non disponibili tramite API.")
+
+    st.markdown("---")
+
+# SEZIONE PRINCIPALE: ANALISI PARTITE E GIORNATE
+if successo and tutte_le_partite:
+    col_giornata, col_info = st.columns([2, 2])
+    with col_giornata:
+        giornata_selezionata = st.selectbox(
+            "🗓️ **Seleziona la Giornata:**",
+            options=list(range(1, 39)),
+            index=int(giornata_corrente - 1)
+        )
+    
+    with col_info:
+        st.write("")
+        st.write("")
+        if giornata_selezionata == giornata_corrente:
+            st.caption("🔴 **Giornata Corrente**")
+        elif giornata_selezionata < giornata_corrente:
+            st.caption("📜 **Giornata Passata** (Scontri già conclusi)")
+        else:
+            st.caption("🔮 **Giornata Futura** (Prossimi incontri)")
+
+    partite_giornata = [m for m in tutte_le_partite if m.get("matchday") == giornata_selezionata]
+
+    if partite_giornata:
+        opzioni_match = {
+            f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}": m 
+            for m in partite_giornata
+        }
+        
+        partita_selezionata = st.selectbox(
+            "🔍 Seleziona la partita da analizzare:",
+            options=list(opzioni_match.keys())
+        )
+
+        match = opzioni_match[partita_selezionata]
+        casa = match["homeTeam"]["name"]
+        trasferta = match["awayTeam"]["name"]
+
+        try:
+            utc_time = datetime.strptime(match["utcDate"], "%Y-%m-%dT%H:%M:%SZ")
+            data_ora_str = utc_time.strftime("%d/%m/%Y alle %H:%M")
+        except ValueError:
+            data_ora_str = match["utcDate"]
+
+        status = match["status"]
+        if status == "FINISHED":
+            score_h = match["score"]["fullTime"]["home"]
+            score_a = match["score"]["fullTime"]["away"]
+            risultato_str = f"✅ **Risultato Finale Reale: {score_h} - {score_a}** (Giocata il {data_ora_str})"
+        elif status in ["IN_PLAY", "PAUSED"]:
+            score_h = match["score"]["fullTime"]["home"]
+            score_a = match["score"]["fullTime"]["away"]
+            risultato_str = f"🔴 **Risultato Live: {score_h} - {score_a}**"
+        else:
+            risultato_str = f"📅 Programmata per il: **{data_ora_str}**"
+
+        st.info(risultato_str)
+
+        # 1. SCHEDA CONFRONTO STATISTICO E FORMA
+        st.subheader("📊 Dettagli e Stato di Forma")
+        
+        st_c = stats_squadre.get(casa, {"pos": "-", "punti": 0, "gf": 1.2, "ga": 1.1, "tot_gf": 15, "form_list": []})
+        st_t = stats_squadre.get(trasferta, {"pos": "-", "punti": 0, "gf": 1.1, "ga": 1.2, "tot_gf": 12, "form_list": []})
+
+        mult_c, list_c = calcola_moltiplicatore_forma(st_c.get("form_list", []))
+        mult_t, list_t = calcola_moltiplicatore_forma(st_t.get("form_list", []))
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown(f"#### 🏠 {casa}")
+            st.write(f"• **Posizione in classifica:** {st_c['pos']}° ({st_c['punti']} pt)")
+            st.write(f"• **Media Gol (Segnati/Subiti):** {st_c['gf']:.2f} / {st_c['ga']:.2f}")
+            st.markdown(f"• **Ultime 5:** {render_form_badges(list_c)}", unsafe_allow_html=True)
+            st.caption(f"Fattore Ponderazione Forma: **x{mult_c:.2f}**")
+
+        with col2:
+            st.markdown(f"#### ✈️ {trasferta}")
+            st.write(f"• **Posizione in classifica:** {st_t['pos']}° ({st_t['punti']} pt)")
+            st.write(f"• **Media Gol (Segnati/Subiti):** {st_t['gf']:.2f} / {st_t['ga']:.2f}")
+            st.markdown(f"• **Ultime 5:** {render_form_badges(list_t)}", unsafe_allow_html=True)
+            st.caption(f"Fattore Ponderazione Forma: **x{mult_t:.2f}**")
+
+        # 2. PRONOSTICO E PROBABILITÀ
+        st.markdown("---")
+        st.subheader("🔮 Pronostico Algoritmetico Pesato")
+
+        prob_1, prob_x, prob_2, g_c, g_t, prob_exact, exp_c, exp_t = calcola_pronostico(
+            st_c["gf"], st_c["ga"], list_c,
+            st_t["gf"], st_t["ga"], list_t
+        )
+
+        st.markdown(
+            f"""
+            <div class="stat-card">
+                <div class="vs-header">🎯 Risultato Stimato: {casa} {g_c} - {g_t} {trasferta}</div>
+                <div style="text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 15px;">
+                    Probabilità del punteggio esatto: <b>{prob_exact:.1f}%</b>
+                </div>
+                <div class="metric-container">
+                    <div class="metric-box">
+                        <div class="metric-title">Vittoria {casa} (1)</div>
+                        <div class="metric-value">{prob_1:.1f}%</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-title">Pareggio (X)</div>
+                        <div class="metric-value">{prob_x:.1f}%</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-title">Vittoria {trasferta} (2)</div>
+                        <div class="metric-value">{prob_2:.1f}%</div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.progress(int(prob_1), text=f"Distribuzione pronostico (1: {prob_1:.0f}% | X: {prob_x:.0f}% | 2: {prob_2:.0f}%)")
+
+        # 3. GIOCATORI CHIAVE DA MONITORARE
+        st.markdown("---")
+        st.subheader("⭐ Giocatori Chiave da Monitorare")
+
+        p_col1, p_col2 = st.columns(2)
+
+        with p_col1:
+            st.markdown(f"**Top Player {casa}**")
+            players_c = classifica_marcatori.get(casa, [])
+            if players_c:
+                for p in players_c[:2]:
+                    tot_goals = p['goals']
+                    tot_team_gf = max(1, st_c['tot_gf'])
+                    quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
+                    prob_marcatore = (1 - poisson.pmf(0, exp_c * quota_gol)) * 100
+                    
+                    st.markdown(
+                        f"""
+                        <div class="player-card">
+                            <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                                • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
+                                • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.caption("Dati marcatori non disponibili per questo club.")
+
+        with p_col2:
+            st.markdown(f"**Top Player {trasferta}**")
+            players_t = classifica_marcatori.get(trasferta, [])
+            if players_t:
+                for p in players_t[:2]:
+                    tot_goals = p['goals']
+                    tot_team_gf = max(1, st_t['tot_gf'])
+                    quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
+                    prob_marcatore = (1 - poisson.pmf(0, exp_t * quota_gol)) * 100
+                    
+                    st.markdown(
+                        f"""
+                        <div class="player-card">
+                            <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                                • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
+                                • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.caption("Dati marcatori non disponibili per questo club.")
+    else:
+        st.warning(f"Nessuna partita trovata per la {giornata_selezionata}ª giornata.")
 
 else:
     st.error("Impossibile caricare le informazioni dalla Serie A.")
