@@ -2,6 +2,8 @@ import streamlit as st
 import requests
 import numpy as np
 import pandas as pd
+import os
+import google.generativeai as genai
 from datetime import datetime
 from scipy.stats import poisson
 
@@ -58,20 +60,91 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 🔑 API TOKEN PERSONALE
+# 🔑 API TOKENS
 API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
 HEADERS = {"X-Auth-Token": API_TOKEN}
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6Ih6njBiYeWxtRQqtNF6xsdXPs1xXvNjOogrCCbfE5d1w")
 
-# Stato della sessione per la classifica
+# Gestione stato della sessione per i menu
 if "show_standings" not in st.session_state:
     st.session_state.show_standings = False
+if "show_analytics" not in st.session_state:
+    st.session_state.show_analytics = False
 
 def toggle_standings():
     st.session_state.show_standings = not st.session_state.show_standings
+    if st.session_state.show_standings:
+        st.session_state.show_analytics = False
+
+def toggle_analytics():
+    st.session_state.show_analytics = not st.session_state.show_analytics
+    if st.session_state.show_analytics:
+        st.session_state.show_standings = False
+
+# --- FUNZIONI GEMINI & ANALISI CSV ---
+
+def genera_sintesi_df(df):
+    """Genera la sintesi strutturata del DataFrame da passare al prompt."""
+    sintesi = []
+    sintesi.append("INFORMAZIONI GENERALI:")
+    sintesi.append(f"- Righe totali: {df.shape[0]}")
+    sintesi.append(f"- Colonne totali: {df.shape[1]}")
+    sintesi.append(f"- Colonne e Tipi: {dict(zip(df.columns, df.dtypes.astype(str)))}")
+    sintesi.append(f"- Duplicati totali: {df.duplicated().sum()}")
+    sintesi.append(f"- Valori mancanti: {df.isnull().sum().to_dict()}\n")
+
+    sintesi.append("ANTEPRIMA DATI (PRIME 5 RIGHE):")
+    sintesi.append(df.head().to_string())
+    sintesi.append("\n")
+
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    if len(num_cols) > 0:
+        sintesi.append("STATISTICHE COLONNE NUMERICHE:")
+        desc = df[num_cols].describe().T[['mean', 'std', 'min', '50%', 'max']].rename(columns={'50%': 'median'})
+        sintesi.append(desc.to_string())
+        sintesi.append("\n")
+
+    cat_cols = df.select_dtypes(include=['object', 'category']).columns
+    if len(cat_cols) > 0:
+        sintesi.append("INFORMAZIONI COLONNE TESTUALI:")
+        for col in cat_cols:
+            val_counts = df[col].value_counts().head(3).to_dict()
+            sintesi.append(f"- Colonna '{col}': {df[col].nunique()} valori unici. Più frequenti: {val_counts}")
+        sintesi.append("\n")
+
+    return "\n".join(sintesi)
+
+def interroga_gemini(sintesi_dati, obiettivo_pronostico):
+    """Invia il prompt a Gemini per l'analisi predittiva."""
+    try:
+        genai.configure(api_key=GEMINI_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        prompt = f"""
+Sei un Data Analyst e un esperto di analisi predittiva.
+Di seguito trovi il riassunto strutturato di una base dati estratta da un file CSV:
+
+--- INIZIO DATI CSV ---
+{sintesi_dati}
+--- FINE DATI CSV ---
+
+OBIETTIVO RICHIESTO:
+{obiettivo_pronostico}
+
+In base a questi dati:
+1. Identifica i pattern o i trend principali.
+2. Fornisci un PRONOSTICO / PREVISIONE motivato e dettagliato sull'obiettivo.
+3. Evidenzia eventuali limiti dei dati o elementi d'incertezza.
+"""
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ Errore durante la chiamata API a Gemini: {e}"
+
+# --- FUNZIONI API FOOTBALL ---
 
 @st.cache_data(ttl=1800)
 def fetch_serie_a_matches():
-    """Recupera la giornata corrente e le partite della Serie A."""
     url = "https://api.football-data.org/v4/competitions/SA/matches"
     try:
         response = requests.get(url, headers=HEADERS, timeout=8)
@@ -96,7 +169,6 @@ def fetch_serie_a_matches():
 
 @st.cache_data(ttl=1800)
 def fetch_team_stats_and_form():
-    """Recupera la classifica dettagliata e calcola la forma reale."""
     url_standings = "https://api.football-data.org/v4/competitions/SA/standings"
     url_matches = "https://api.football-data.org/v4/competitions/SA/matches"
     
@@ -111,7 +183,6 @@ def fetch_team_stats_and_form():
                 t_name = row["team"]["name"]
                 played = max(1, row["playedGames"])
                 
-                # Tabella per la classifica completa
                 standings_table.append({
                     "Pos": row["position"],
                     "Squadra": t_name,
@@ -169,7 +240,6 @@ def fetch_team_stats_and_form():
 
 @st.cache_data(ttl=3600)
 def fetch_top_scorers():
-    """Recupera la classifica marcatori generale della Serie A."""
     url = "https://api.football-data.org/v4/competitions/SA/scorers"
     scorers_by_team = {}
     try:
@@ -193,7 +263,6 @@ def fetch_top_scorers():
     return scorers_by_team
 
 def calcola_moltiplicatore_forma(form_list):
-    """Calcola il moltiplicatore di forma basato sulla lista dei risultati (W/D/L)."""
     if not form_list:
         return 1.0, []
     
@@ -208,7 +277,6 @@ def calcola_moltiplicatore_forma(form_list):
     return moltiplicatore, form_list
 
 def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, form_trasferta):
-    """Calcola le probabilità 1X2 e il risultato esatto pesando la forma recente."""
     mult_c, _ = calcola_moltiplicatore_forma(form_casa)
     mult_t, _ = calcola_moltiplicatore_forma(form_trasferta)
 
@@ -235,7 +303,6 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
     return prob_1, prob_x, prob_2, g_c, g_t, prob_exact, lambda_casa, lambda_trasferta
 
 def render_form_badges(form_list):
-    """Genera l'HTML per mostrare i badge visuali della forma (W/D/L)."""
     if not form_list:
         return '<span style="color: #94a3b8; font-size: 12px;">Dati non disponibili</span>'
     
@@ -247,22 +314,24 @@ def render_form_badges(form_list):
 
 # --- LAYOUT APPLICAZIONE ---
 
-# Intestazione con pulsante Classifica a destra
-col_title, col_btn = st.columns([3, 1])
+st.title("⚽ Serie A Hub")
 
-with col_title:
-    st.title("⚽ Serie A Hub")
+# Pulsanti della barra superiore
+col_btn1, col_btn2 = st.columns(2)
 
-with col_btn:
-    st.write("") # Spaziatore
-    lbl_btn = "❌ Chiudi Classifica" if st.session_state.show_standings else "📊 Classifica"
-    st.button(lbl_btn, on_click=toggle_standings, use_container_width=True)
+with col_btn1:
+    lbl_standings = "❌ Chiudi Classifica" if st.session_state.show_standings else "📊 Classifica"
+    st.button(lbl_standings, on_click=toggle_standings, use_container_width=True)
+
+with col_btn2:
+    lbl_analytics = "❌ Chiudi Analisi" if st.session_state.show_analytics else "📈 Analisi e Statistiche"
+    st.button(lbl_analytics, on_click=toggle_analytics, use_container_width=True)
 
 giornata, partite, successo = fetch_serie_a_matches()
 stats_squadre, classifica_completa = fetch_team_stats_and_form()
 classifica_marcatori = fetch_top_scorers()
 
-# SEZIONE CLASSIFICA COMPLETA (mostrata se cliccato il tasto)
+# SEZIONE CLASSIFICA
 if st.session_state.show_standings:
     st.markdown("---")
     st.subheader("🏆 Classifica Serie A Aggiornata")
@@ -284,6 +353,40 @@ if st.session_state.show_standings:
         st.warning("Classifica temporaneamente non disponibile.")
     st.markdown("---")
 
+# SEZIONE ANALISI E STATISTICHE (GEMINI + CSV)
+if st.session_state.show_analytics:
+    st.markdown("---")
+    st.subheader("📈 Analisi Predittiva Dati con Gemini AI")
+    st.caption("Carica un file CSV per elaborare statistiche e pronostici avanzati tramite IA.")
+
+    file_caricato = st.file_uploader("Carica un file CSV (es. classifica.csv)", type=["csv"])
+    
+    if file_caricato is not None:
+        try:
+            df_uploaded = pd.read_csv(file_caricato)
+            st.success(f"File caricato correttamente: **{df_uploaded.shape[0]}** righe x **{df_uploaded.shape[1]}** colonne.")
+            
+            with st.expander("👁️ Anteprima File CSV"):
+                st.dataframe(df_uploaded.head())
+
+            domanda_utente = st.text_input(
+                "🎯 Domanda o obiettivo per Gemini:",
+                value="Sulla base di questi dati, qual è il pronostico sulle vendite o sui risultati futuri?"
+            )
+
+            if st.button("🤖 Genera Pronostico con Gemini", use_container_width=True):
+                with st.spinner("Elaborazione della sintesi e interrogazione di Gemini in corso..."):
+                    sintesi_txt = genera_sintesi_df(df_uploaded)
+                    risposta_ai = interroga_gemini(sintesi_txt, domanda_utente)
+                    
+                    st.markdown("### 🔮 Risultato dell'Analisi AI")
+                    st.markdown(risposta_ai)
+
+        except Exception as e:
+            st.error(f"Errore durante la lettura del file CSV: {e}")
+    st.markdown("---")
+
+# SEZIONE PRINCIPALE: MATCH ANALYZER
 if successo and giornata:
     st.markdown(f"### 📅 **{giornata}ª Giornata di Serie A**")
     
