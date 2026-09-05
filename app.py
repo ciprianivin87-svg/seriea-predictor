@@ -256,11 +256,61 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
 
     return prob_1, prob_x, prob_2, g_c, g_t, prob_exact, lambda_casa, lambda_trasferta, matrice_p
 
+def calcola_probabilita_scommesse(matrice_p, prob_1, prob_x, prob_2):
+    """Calcola le probabilità e le quote eque per Under/Over, Gol/NoGol e Doppia Chance."""
+    # 1. Under / Over
+    tot_goals_matrix = np.fromfunction(lambda i, j: i + j, (6, 6), dtype=int)
+    
+    under15 = np.sum(matrice_p[tot_goals_matrix < 1.5])
+    over15 = np.sum(matrice_p[tot_goals_matrix > 1.5])
+    
+    under25 = np.sum(matrice_p[tot_goals_matrix < 2.5])
+    over25 = np.sum(matrice_p[tot_goals_matrix > 2.5])
+    
+    under35 = np.sum(matrice_p[tot_goals_matrix < 3.5])
+    over35 = np.sum(matrice_p[tot_goals_matrix > 3.5])
+
+    # 2. Gol / NoGol
+    # NoGol = casa 0 gol (riga 0) O trasferta 0 gol (colonna 0)
+    nogol = np.sum(matrice_p[0, :]) + np.sum(matrice_p[1:, 0])
+    gol = 100.0 - nogol
+
+    # 3. Doppia Chance
+    dc_1x = prob_1 + prob_x
+    dc_x2 = prob_x + prob_2
+    dc_12 = prob_1 + prob_2
+
+    def fair_odds(prob):
+        return round(100.0 / prob, 2) if prob > 0 else 99.0
+
+    scommesse_data = [
+        {"Mercato": "Esito Finale (1X2)", "Esito": "1", "Probabilità": f"{prob_1:.1f}%", "Quota Equa": f"{fair_odds(prob_1):.2f}"},
+        {"Mercato": "Esito Finale (1X2)", "Esito": "X", "Probabilità": f"{prob_x:.1f}%", "Quota Equa": f"{fair_odds(prob_x):.2f}"},
+        {"Mercato": "Esito Finale (1X2)", "Esito": "2", "Probabilità": f"{prob_2:.1f}%", "Quota Equa": f"{fair_odds(prob_2):.2f}"},
+        
+        {"Mercato": "Doppia Chance", "Esito": "1X", "Probabilità": f"{dc_1x:.1f}%", "Quota Equa": f"{fair_odds(dc_1x):.2f}"},
+        {"Mercato": "Doppia Chance", "Esito": "X2", "Probabilità": f"{dc_x2:.1f}%", "Quota Equa": f"{fair_odds(dc_x2):.2f}"},
+        {"Mercato": "Doppia Chance", "Esito": "12", "Probabilità": f"{dc_12:.1f}%", "Quota Equa": f"{fair_odds(dc_12):.2f}"},
+        
+        {"Mercato": "Under / Over 1.5", "Esito": "Under 1.5", "Probabilità": f"{under15:.1f}%", "Quota Equa": f"{fair_odds(under15):.2f}"},
+        {"Mercato": "Under / Over 1.5", "Esito": "Over 1.5", "Probabilità": f"{over15:.1f}%", "Quota Equa": f"{fair_odds(over15):.2f}"},
+        
+        {"Mercato": "Under / Over 2.5", "Esito": "Under 2.5", "Probabilità": f"{under25:.1f}%", "Quota Equa": f"{fair_odds(under25):.2f}"},
+        {"Mercato": "Under / Over 2.5", "Esito": "Over 2.5", "Probabilità": f"{over25:.1f}%", "Quota Equa": f"{fair_odds(over25):.2f}"},
+        
+        {"Mercato": "Under / Over 3.5", "Esito": "Under 3.5", "Probabilità": f"{under35:.1f}%", "Quota Equa": f"{fair_odds(under35):.2f}"},
+        {"Mercato": "Under / Over 3.5", "Esito": "Over 3.5", "Probabilità": f"{over35:.1f}%", "Quota Equa": f"{fair_odds(over35):.2f}"},
+        
+        {"Mercato": "Gol / NoGol", "Esito": "Gol", "Probabilità": f"{gol:.1f}%", "Quota Equa": f"{fair_odds(gol):.2f}"},
+        {"Mercato": "Gol / NoGol", "Esito": "NoGol", "Probabilità": f"{nogol:.1f}%", "Quota Equa": f"{fair_odds(nogol):.2f}"},
+    ]
+
+    return pd.DataFrame(scommesse_data)
+
 def genera_plotly_heatmap(matrice_p, squadra_casa, squadra_trasferta):
     """Genera una matrice Heatmap interattiva con Plotly per i risultati esatti."""
     gol_labels = ["0", "1", "2", "3", "4", "5"]
     
-    # Annotazioni per visualizzare la % dentro ogni casella
     annotations = []
     for i in range(6):
         for j in range(6):
@@ -511,11 +561,33 @@ if successo and tutte_le_partite:
 
         st.progress(int(prob_1), text=f"Distribuzione pronostico (1: {prob_1:.0f}% | X: {prob_x:.0f}% | 2: {prob_2:.0f}%)")
 
-        # 📈 GRAFICO HEATMAP CON PLOTLY
+        # 🎲 3. QUOTE & PROBABILITÀ PER SCOMMESSE
+        st.markdown("---")
+        st.subheader("🎲 Quote Equa & Probabilità per Scommesse")
+        st.caption("Quote calcolate in base al modello matematico di Poisson (senza allibramento del bookmaker).")
+
+        df_scommesse = calcola_probabilita_scommesse(matrice_p, prob_1, prob_x, prob_2)
+
+        # Filtro rapido per mercato
+        mercati_disponibili = ["Tutti"] + list(df_scommesse["Mercato"].unique())
+        mercato_sel = st.selectbox("Filtra Mercato Scommesse:", mercati_disponibili)
+
+        df_scommesse_display = df_scommesse.copy()
+        if mercato_sel != "Tutti":
+            df_scommesse_display = df_scommesse_display[df_scommesse_display["Mercato"] == mercato_sel]
+
+        st.dataframe(
+            df_scommesse_display,
+            hide_index=True,
+            use_container_width=True
+        )
+
+        # 4. GRAFICO HEATMAP CON PLOTLY
+        st.markdown("---")
         fig_heatmap = genera_plotly_heatmap(matrice_p, casa, trasferta)
         st.plotly_chart(fig_heatmap, use_container_width=True)
 
-        # 3. GIOCATORI CHIAVE DA MONITORARE
+        # 5. GIOCATORI CHIAVE DA MONITORARE
         st.markdown("---")
         st.subheader("⭐ Giocatori Chiave da Monitorare")
 
