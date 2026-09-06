@@ -157,7 +157,7 @@ def fetch_team_stats_and_form():
 
 @st.cache_data(ttl=3600)
 def fetch_top_scorers():
-    """Recupera la classifica marcatori o fornisce giocatori chiave stimati di fallback."""
+    """Recupera la classifica marcatori generale della Serie A."""
     url = "https://api.football-data.org/v4/competitions/SA/scorers"
     scorers_by_team = {}
     all_scorers_list = []
@@ -201,7 +201,6 @@ def fetch_top_scorers():
                 })
     except Exception:
         pass
-        
     return scorers_by_team, all_scorers_list
 
 def get_team_key_players(team_name, scorers_by_team, stats_squadre):
@@ -209,11 +208,9 @@ def get_team_key_players(team_name, scorers_by_team, stats_squadre):
     if team_name in scorers_by_team and scorers_by_team[team_name]:
         return scorers_by_team[team_name]
     
-    # Fallback: Se la squadra non ha marcatori nella top 10 generale API
     st_team = stats_squadre.get(team_name, {"tot_gf": 10})
     tot_gf = max(1, st_team.get("tot_gf", 10))
     
-    # Stima prudente basata sulle medie squadra
     return [
         {
             "name": "Principale Riferimento Offensivo",
@@ -263,7 +260,6 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
     lambda_casa = max(0.5, (gf_c_adj + ga_t_adj) / 2)
     lambda_trasferta = max(0.5, (gf_t_adj + ga_c_adj) / 2)
 
-    # Arrotondamento coerente per il Risultato Stimato
     g_c = int(round(lambda_casa))
     g_t = int(round(lambda_trasferta))
 
@@ -276,22 +272,22 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
     raw_prob_x = np.sum(np.diag(matrice_p))
     raw_prob_2 = np.sum(np.triu(matrice_p, 1))
 
-    # Riajustamento coerente dell'esito vincente in base al risultato stimato
-    if g_c > g_t:  # Punteggio di vittoria Casa
+    # Allineamento dinamico delle probabilità in base al risultato stimato
+    if g_c > g_t:
         prob_1 = max(raw_prob_1, raw_prob_x + 5.0, raw_prob_2 + 5.0)
         rem = 100.0 - prob_1
-        prob_x = rem * (raw_prob_x / (raw_prob_x + raw_prob_2))
-        prob_2 = rem * (raw_prob_2 / (raw_prob_x + raw_prob_2))
-    elif g_c < g_t:  # Punteggio di vittoria Trasferta
+        prob_x = rem * (raw_prob_x / (raw_prob_x + raw_prob_2)) if (raw_prob_x + raw_prob_2) > 0 else rem / 2
+        prob_2 = rem * (raw_prob_2 / (raw_prob_x + raw_prob_2)) if (raw_prob_x + raw_prob_2) > 0 else rem / 2
+    elif g_c < g_t:
         prob_2 = max(raw_prob_2, raw_prob_1 + 5.0, raw_prob_x + 5.0)
         rem = 100.0 - prob_2
-        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_x))
-        prob_x = rem * (raw_prob_x / (raw_prob_1 + raw_prob_x))
-    else:  # Pareggio
+        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_x)) if (raw_prob_1 + raw_prob_x) > 0 else rem / 2
+        prob_x = rem * (raw_prob_x / (raw_prob_1 + raw_prob_x)) if (raw_prob_1 + raw_prob_x) > 0 else rem / 2
+    else:
         prob_x = max(raw_prob_x, raw_prob_1 + 2.0, raw_prob_2 + 2.0)
         rem = 100.0 - prob_x
-        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_2))
-        prob_2 = rem * (raw_prob_2 / (raw_prob_1 + raw_prob_2))
+        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_2)) if (raw_prob_1 + raw_prob_2) > 0 else rem / 2
+        prob_2 = rem * (raw_prob_2 / (raw_prob_1 + raw_prob_2)) if (raw_prob_1 + raw_prob_2) > 0 else rem / 2
 
     prob_exact = matrice_p[min(g_c, 5), min(g_t, 5)]
 
@@ -478,7 +474,7 @@ tutte_le_partite, giornata_corrente, successo = fetch_all_serie_a_matches()
 stats_squadre, classifica_completa = fetch_team_stats_and_form()
 classifica_marcatori, marcatori_completi_list = fetch_top_scorers()
 
-# SEZIONE CLASSIFICHE (Visibile solo se si preme il pulsante "Classifiche")
+# SEZIONE CLASSIFICHE
 if st.session_state.show_standings:
     st.markdown("---")
     
@@ -568,7 +564,6 @@ if successo and tutte_le_partite:
     partite_giornata = [m for m in tutte_le_partite if m.get("matchday") == giornata_selezionata]
 
     if partite_giornata:
-        # STRUTTURA A TAB PER SEPARARE L'ANALISI DALLA VERIFICA
         tab_analisi, tab_verifica = st.tabs(["🔍 Analisi Singola Partita", "📜 Verifica Accuracy Giornata"])
 
         with tab_analisi:
@@ -682,53 +677,51 @@ if successo and tutte_le_partite:
 
             with p_col1:
                 st.markdown(f"**Top Player {casa}**")
-                players_c = classifica_marcatori.get(casa, [])
-                if players_c:
-                    for p in players_c[:2]:
-                        tot_goals = p['goals']
-                        tot_team_gf = max(1, st_c['tot_gf'])
-                        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
-                        prob_marcatore = (1 - poisson.pmf(0, exp_c * quota_gol)) * 100
-                        
-                        st.markdown(
-                            f"""
-                            <div class="player-card">
-                                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}</div>
-                                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
-                                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
-                                </div>
+                players_c = get_team_key_players(casa, classifica_marcatori, stats_squadre)
+                for p in players_c[:2]:
+                    tot_goals = p['goals']
+                    tot_team_gf = max(1, st_c['tot_gf'])
+                    quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
+                    prob_marcatore = (1 - poisson.pmf(0, exp_c * quota_gol)) * 100
+                    
+                    badge_tag = " <span style='font-size:10px; color:#eab308;'>(Stima Modello)</span>" if p.get("is_fallback") else ""
+                    
+                    st.markdown(
+                        f"""
+                        <div class="player-card">
+                            <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}{badge_tag}</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                                • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
+                                • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
                             </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.caption("Dati marcatori non disponibili per questo club.")
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
             with p_col2:
                 st.markdown(f"**Top Player {trasferta}**")
-                players_t = classifica_marcatori.get(trasferta, [])
-                if players_t:
-                    for p in players_t[:2]:
-                        tot_goals = p['goals']
-                        tot_team_gf = max(1, st_t['tot_gf'])
-                        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
-                        prob_marcatore = (1 - poisson.pmf(0, exp_t * quota_gol)) * 100
-                        
-                        st.markdown(
-                            f"""
-                            <div class="player-card">
-                                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}</div>
-                                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
-                                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
-                                </div>
+                players_t = get_team_key_players(trasferta, classifica_marcatori, stats_squadre)
+                for p in players_t[:2]:
+                    tot_goals = p['goals']
+                    tot_team_gf = max(1, st_t['tot_gf'])
+                    quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
+                    prob_marcatore = (1 - poisson.pmf(0, exp_t * quota_gol)) * 100
+                    
+                    badge_tag = " <span style='font-size:10px; color:#eab308;'>(Stima Modello)</span>" if p.get("is_fallback") else ""
+                    
+                    st.markdown(
+                        f"""
+                        <div class="player-card">
+                            <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}{badge_tag}</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                                • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
+                                • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
                             </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.caption("Dati marcatori non disponibili per questo club.")
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
         with tab_verifica:
             mostra_verifica_pronostici(partite_giornata, stats_squadre)
@@ -738,57 +731,3 @@ if successo and tutte_le_partite:
 
 else:
     st.error("Impossibile caricare le informazioni dalla Serie A.")
-    
-# 5. GIOCATORI CHIAVE DA MONITORARE
-st.markdown("---")
-st.subheader("⭐ Giocatori Chiave da Monitorare")
-
-p_col1, p_col2 = st.columns(2)
-
-with p_col1:
-    st.markdown(f"**Top Player {casa}**")
-    players_c = get_team_key_players(casa, classifica_marcatori, stats_squadre)
-    for p in players_c[:2]:
-        tot_goals = p['goals']
-        tot_team_gf = max(1, st_c['tot_gf'])
-        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
-        prob_marcatore = (1 - poisson.pmf(0, exp_c * quota_gol)) * 100
-        
-        badge_tag = " <span style='font-size:10px; color:#eab308;'>(Stima Modello)</span>" if p.get("is_fallback") else ""
-        
-        st.markdown(
-            f"""
-            <div class="player-card">
-                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}{badge_tag}</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
-                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-with p_col2:
-    st.markdown(f"**Top Player {trasferta}**")
-    players_t = get_team_key_players(trasferta, classifica_marcatori, stats_squadre)
-    for p in players_t[:2]:
-        tot_goals = p['goals']
-        tot_team_gf = max(1, st_t['tot_gf'])
-        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
-        prob_marcatore = (1 - poisson.pmf(0, exp_t * quota_gol)) * 100
-        
-        badge_tag = " <span style='font-size:10px; color:#eab308;'>(Stima Modello)</span>" if p.get("is_fallback") else ""
-        
-        st.markdown(
-            f"""
-            <div class="player-card">
-                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}{badge_tag}</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
-                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
