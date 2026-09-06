@@ -157,7 +157,7 @@ def fetch_team_stats_and_form():
 
 @st.cache_data(ttl=3600)
 def fetch_top_scorers():
-    """Recupera la classifica marcatori generale della Serie A."""
+    """Recupera la classifica marcatori o fornisce giocatori chiave stimati di fallback."""
     url = "https://api.football-data.org/v4/competitions/SA/scorers"
     scorers_by_team = {}
     all_scorers_list = []
@@ -181,7 +181,8 @@ def fetch_top_scorers():
                     "goals": goals,
                     "assists": assists,
                     "penalties": penalties,
-                    "playedMatches": played_matches
+                    "playedMatches": played_matches,
+                    "is_fallback": False
                 }
                 
                 if team not in scorers_by_team:
@@ -200,7 +201,39 @@ def fetch_top_scorers():
                 })
     except Exception:
         pass
+        
     return scorers_by_team, all_scorers_list
+
+def get_team_key_players(team_name, scorers_by_team, stats_squadre):
+    """Restituisce i marcatori reali o genera un profilo stimato per le squadre non presenti nei Top 10."""
+    if team_name in scorers_by_team and scorers_by_team[team_name]:
+        return scorers_by_team[team_name]
+    
+    # Fallback: Se la squadra non ha marcatori nella top 10 generale API
+    st_team = stats_squadre.get(team_name, {"tot_gf": 10})
+    tot_gf = max(1, st_team.get("tot_gf", 10))
+    
+    # Stima prudente basata sulle medie squadra
+    return [
+        {
+            "name": "Principale Riferimento Offensivo",
+            "position": "Attaccante",
+            "goals": max(1, int(tot_gf * 0.30)),
+            "assists": 1,
+            "penalties": 0,
+            "playedMatches": "-",
+            "is_fallback": True
+        },
+        {
+            "name": "Seconda Punta / Rigorista",
+            "position": "Attaccante/Centrocampista",
+            "goals": max(1, int(tot_gf * 0.20)),
+            "assists": 2,
+            "penalties": 0,
+            "playedMatches": "-",
+            "is_fallback": True
+        }
+    ]
 
 def calcola_moltiplicatore_forma(form_list):
     """Calcola il moltiplicatore di forma basato sulla lista dei risultati (W/D/L)."""
@@ -705,3 +738,57 @@ if successo and tutte_le_partite:
 
 else:
     st.error("Impossibile caricare le informazioni dalla Serie A.")
+    
+# 5. GIOCATORI CHIAVE DA MONITORARE
+st.markdown("---")
+st.subheader("⭐ Giocatori Chiave da Monitorare")
+
+p_col1, p_col2 = st.columns(2)
+
+with p_col1:
+    st.markdown(f"**Top Player {casa}**")
+    players_c = get_team_key_players(casa, classifica_marcatori, stats_squadre)
+    for p in players_c[:2]:
+        tot_goals = p['goals']
+        tot_team_gf = max(1, st_c['tot_gf'])
+        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
+        prob_marcatore = (1 - poisson.pmf(0, exp_c * quota_gol)) * 100
+        
+        badge_tag = " <span style='font-size:10px; color:#eab308;'>(Stima Modello)</span>" if p.get("is_fallback") else ""
+        
+        st.markdown(
+            f"""
+            <div class="player-card">
+                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}{badge_tag}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
+                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+with p_col2:
+    st.markdown(f"**Top Player {trasferta}**")
+    players_t = get_team_key_players(trasferta, classifica_marcatori, stats_squadre)
+    for p in players_t[:2]:
+        tot_goals = p['goals']
+        tot_team_gf = max(1, st_t['tot_gf'])
+        quota_gol = (tot_goals / tot_team_gf) if tot_team_gf > 0 else 0.2
+        prob_marcatore = (1 - poisson.pmf(0, exp_t * quota_gol)) * 100
+        
+        badge_tag = " <span style='font-size:10px; color:#eab308;'>(Stima Modello)</span>" if p.get("is_fallback") else ""
+        
+        st.markdown(
+            f"""
+            <div class="player-card">
+                <div style="font-weight: bold; color: #f8fafc;">🏃 {p['name']}{badge_tag}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                    • Gol stagionali: <b>{tot_goals}</b> (rigori: {p['penalties']})<br>
+                    • Probabilità di segnare oggi: <b style="color: #38bdf8;">{prob_marcatore:.1f}%</b>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
