@@ -15,7 +15,7 @@ st.markdown("""
     .stat-card {
         background-color: #1e293b;
         border-radius: 10px;
-        padding: 16px;
+        padding: 20px;
         margin-bottom: 15px;
         border: 1px solid #334155;
     }
@@ -31,19 +31,7 @@ st.markdown("""
         font-weight: bold;
         color: #f8fafc;
         text-align: center;
-        margin-bottom: 15px;
     }
-    .metric-container {
-        display: flex;
-        justify-content: space-around;
-        background-color: #0f172a;
-        padding: 12px;
-        border-radius: 8px;
-        margin-top: 10px;
-    }
-    .metric-box { text-align: center; }
-    .metric-title { font-size: 12px; color: #94a3b8; margin-bottom: 2px; }
-    .metric-value { font-size: 16px; font-weight: bold; color: #38bdf8; }
     .form-badge {
         display: inline-block;
         padding: 2px 6px;
@@ -603,29 +591,10 @@ if successo and tutte_le_partite:
                 f"""
                 <div class="stat-card">
                     <div class="vs-header">🎯 Risultato Stimato: {casa} {g_c} - {g_t} {trasferta}</div>
-                    <div style="text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 15px;">
-                        Probabilità del punteggio esatto: <b>{prob_exact:.1f}%</b>
-                    </div>
-                    <div class="metric-container">
-                        <div class="metric-box">
-                            <div class="metric-title">Vittoria {casa} (1)</div>
-                            <div class="metric-value">{prob_1:.1f}%</div>
-                        </div>
-                        <div class="metric-box">
-                            <div class="metric-title">Pareggio (X)</div>
-                            <div class="metric-value">{prob_x:.1f}%</div>
-                        </div>
-                        <div class="metric-box">
-                            <div class="metric-title">Vittoria {trasferta} (2)</div>
-                            <div class="metric-value">{prob_2:.1f}%</div>
-                        </div>
-                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-
-            st.progress(int(prob_1), text=f"Distribuzione pronostico (1: {prob_1:.0f}% | X: {prob_x:.0f}% | 2: {prob_2:.0f}%)")
 
             # 3. QUOTE & PROBABILITÀ PER SCOMMESSE
             st.markdown("---")
