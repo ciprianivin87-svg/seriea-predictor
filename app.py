@@ -218,7 +218,7 @@ def calcola_moltiplicatore_forma(form_list):
     return moltiplicatore, form_list
 
 def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, form_trasferta):
-    """Calcola le probabilità 1X2, la matrice di Poisson e il risultato esatto."""
+    """Calcola le probabilità 1X2 coerenti, la matrice di Poisson e il risultato esatto."""
     mult_c, _ = calcola_moltiplicatore_forma(form_casa)
     mult_t, _ = calcola_moltiplicatore_forma(form_trasferta)
 
@@ -230,17 +230,37 @@ def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, 
     lambda_casa = max(0.5, (gf_c_adj + ga_t_adj) / 2)
     lambda_trasferta = max(0.5, (gf_t_adj + ga_c_adj) / 2)
 
+    # Arrotondamento coerente per il Risultato Stimato
+    g_c = int(round(lambda_casa))
+    g_t = int(round(lambda_trasferta))
+
     matrice_p = np.zeros((6, 6))
     for i in range(6):
         for j in range(6):
             matrice_p[i, j] = poisson.pmf(i, lambda_casa) * poisson.pmf(j, lambda_trasferta) * 100
 
-    prob_1 = np.sum(np.tril(matrice_p, -1))
-    prob_x = np.sum(np.diag(matrice_p))
-    prob_2 = np.sum(np.triu(matrice_p, 1))
+    raw_prob_1 = np.sum(np.tril(matrice_p, -1))
+    raw_prob_x = np.sum(np.diag(matrice_p))
+    raw_prob_2 = np.sum(np.triu(matrice_p, 1))
 
-    g_c, g_t = np.unravel_index(np.argmax(matrice_p), matrice_p.shape)
-    prob_exact = matrice_p[g_c, g_t]
+    # Riajustamento coerente dell'esito vincente in base al risultato stimato
+    if g_c > g_t:  # Punteggio di vittoria Casa
+        prob_1 = max(raw_prob_1, raw_prob_x + 5.0, raw_prob_2 + 5.0)
+        rem = 100.0 - prob_1
+        prob_x = rem * (raw_prob_x / (raw_prob_x + raw_prob_2))
+        prob_2 = rem * (raw_prob_2 / (raw_prob_x + raw_prob_2))
+    elif g_c < g_t:  # Punteggio di vittoria Trasferta
+        prob_2 = max(raw_prob_2, raw_prob_1 + 5.0, raw_prob_x + 5.0)
+        rem = 100.0 - prob_2
+        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_x))
+        prob_x = rem * (raw_prob_x / (raw_prob_1 + raw_prob_x))
+    else:  # Pareggio
+        prob_x = max(raw_prob_x, raw_prob_1 + 2.0, raw_prob_2 + 2.0)
+        rem = 100.0 - prob_x
+        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_2))
+        prob_2 = rem * (raw_prob_2 / (raw_prob_1 + raw_prob_2))
+
+    prob_exact = matrice_p[min(g_c, 5), min(g_t, 5)]
 
     return prob_1, prob_x, prob_2, g_c, g_t, prob_exact, lambda_casa, lambda_trasferta, matrice_p
 
@@ -260,9 +280,9 @@ def calcola_probabilita_scommesse(matrice_p, prob_1, prob_x, prob_2):
     nogol = np.sum(matrice_p[0, :]) + np.sum(matrice_p[1:, 0])
     gol = 100.0 - nogol
 
-    dc_1x = prob_1 + prob_x
-    dc_x2 = prob_x + prob_2
-    dc_12 = prob_1 + prob_2
+    dc_1x = min(99.0, prob_1 + prob_x)
+    dc_x2 = min(99.0, prob_x + prob_2)
+    dc_12 = min(99.0, prob_1 + prob_2)
 
     def fair_odds(prob):
         return round(100.0 / prob, 2) if prob > 0 else 99.0
