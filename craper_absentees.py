@@ -1,10 +1,7 @@
-pip install beautifulsoup4 requests
-
 import re
 import requests
 from bs4 import BeautifulSoup
 
-# Lista ufficiale squadre Serie A per il matching del parser
 SERIE_A_TEAMS = [
     "ATALANTA",
     "BOLOGNA",
@@ -49,21 +46,16 @@ def fetch_live_absentees():
 
     absentees_by_team = {team: [] for team in SERIE_A_TEAMS}
 
-    # Isoliamo i blocchi di testo per ciascuna squadra
     for i, team in enumerate(SERIE_A_TEAMS):
       next_team = (
           SERIE_A_TEAMS[i + 1] if i + 1 < len(SERIE_A_TEAMS) else "Indisponibili"
       )
 
-      # Pattern Regex per estrarre il testo compreso tra il nome di una squadra e la successiva
       pattern = rf"{team}\s+Infortunati(.*?)(?={next_team}|$)"
       match = re.search(pattern, full_text, re.DOTALL | re.IGNORECASE)
 
       if match:
         team_section = match.group(1)
-
-        # Estraiamo i cognomi/nomi dei calciatori menzionati prima della descrizione dell'infortunio
-        # Esempio catturato: "Yildiz l'attaccante turco...", "Meret Il portiere..."
         players = re.findall(
             r"([A-Z][a-zA-L'\s]+?)\s+(?:il|l'|l’)\s*(?:attaccante|difensore|centrocampista|portiere|regist|ala|cursore|metronomo)",
             team_section,
@@ -95,13 +87,4 @@ def get_team_absentees(team_name, absentees_dict):
 
 
 if __name__ == "__main__":
-  print("Avvio test parser indisponibili...")
-  data = fetch_live_absentees()
-
-  if data:
-    print("\n✅ Scraping e Parsing completati con successo!")
-    for team, absentees in data.items():
-      if absentees:
-        print(f"\n{team}: {', '.join(absentees)}")
-  else:
-    print("❌ Nessun dato estratto.")
+  print(fetch_live_absentees())
