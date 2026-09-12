@@ -53,8 +53,7 @@ HEADERS = {"X-Auth-Token": API_TOKEN}
 
 # Stato della sessione per la sezione Classifiche
 if "show_standings" not in st.session_state:
-    st.session_state.show_standings = False
-
+st.session_state.show_standings = False
 def toggle_standings():
     st.session_state.show_standings = not st.session_state.show_standings
 
