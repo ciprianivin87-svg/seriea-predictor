@@ -1,3 +1,14 @@
+import os
+import sys
+
+# Aggiunge la directory del file corrente al sys.path di Python
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Ora gli import dei moduli locali funzioneranno senza errori
+from api_squad_mapper import get_team_squad_from_api, parse_absentees_with_squad
+from lineup_impact import adjust_lambda_for_absences, calculate_team_malus
+from scraper_absentees import fetch_live_absentees, get_team_absentees
+
 import numpy as np
 import pandas as pd
 from scipy.stats import poisson
