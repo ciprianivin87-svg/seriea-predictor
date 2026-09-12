@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
+API_TOKEN = st.secrets["API_TOKEN"]
 HEADERS = {"X-Auth-Token": API_TOKEN}
 
 @st.cache_data(ttl=1800)
