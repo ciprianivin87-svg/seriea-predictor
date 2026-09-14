@@ -4,199 +4,115 @@ from scipy.stats import poisson
 import plotly.graph_objects as go
 
 def calcola_moltiplicatore_forma(form_list):
-    """Calcola il moltiplicatore di forma basato sulla lista dei risultati (W/D/L)."""
+    """
+    Calcola un moltiplicatore di forma basato sulle ultime 5 partite.
+    Vittoria (W) = 3pt, Pareggio (D) = 1pt, Sconfitta (L) = 0pt.
+    """
     if not form_list:
-        return 1.0, []
+        return 1.0, ["D", "D", "D", "D", "D"]
     
-    modificatore = 0.0
-    for r in form_list:
-        if r == "W":
-            modificatore += 0.05
-        elif r == "L":
-            modificatore -= 0.05
-
-    moltiplicatore = max(0.7, min(1.3, 1.0 + modificatore))
+    punti = 0
+    for res in form_list:
+        if res == "W": punti += 3
+        elif res == "D": punti += 1
+        
+    punti_max = len(form_list) * 3
+    if punti_max == 0:
+        return 1.0, form_list
+        
+    rapporto = punti / punti_max
+    # Moltiplicatore compreso tra 0.85 (forma pessima) e 1.15 (forma eccellente)
+    moltiplicatore = 0.85 + (rapporto * 0.30)
     return moltiplicatore, form_list
 
+def render_form_badges(form_list):
+    """Genera l'HTML per mostrare i badge W/D/L delle ultime 5 partite."""
+    html_badges = ""
+    for res in form_list:
+        color_class = f"form-{res}" if res in ["W", "D", "L"] else "form-D"
+        html_badges += f'<span class="form-badge {color_class}">{res}</span>'
+    return html_badges
+
 def calcola_pronostico(gf_casa, ga_casa, form_casa, gf_trasferta, ga_trasferta, form_trasferta):
-    """Calcola le probabilità 1X2 coerenti, la matrice di Poisson e il risultato esatto."""
+    """
+    Calcola le aspettative di gol e la matrice di probabilità di Poisson
+    pesata sullo stato di forma delle due squadre.
+    """
     mult_c, _ = calcola_moltiplicatore_forma(form_casa)
     mult_t, _ = calcola_moltiplicatore_forma(form_trasferta)
 
-    gf_c_adj = gf_casa * mult_c
-    ga_c_adj = ga_casa / mult_c
-    gf_t_adj = gf_trasferta * mult_t
-    ga_t_adj = ga_trasferta / mult_t
+    # Stima dei gol attesi basata sul potenziale d'attacco e difesa
+    exp_gol_casa = max(0.2, (gf_casa * ga_trasferta / 1.1) * mult_c)
+    exp_gol_trasferta = max(0.2, (gf_trasferta * ga_casa / 1.1) * mult_t)
 
-    lambda_casa = max(0.5, (gf_c_adj + ga_t_adj) / 2)
-    lambda_trasferta = max(0.5, (gf_t_adj + ga_c_adj) / 2)
+    # Costruzione della matrice di probabilità (fino a 6 gol per squadra)
+    max_goals = 6
+    matrice_p = np.zeros((max_goals, max_goals))
 
-    g_c = int(round(lambda_casa))
-    g_t = int(round(lambda_trasferta))
+    for i in range(max_goals):
+        for j in range(max_goals):
+            matrice_p[i, j] = poisson.pmf(i, exp_gol_casa) * poisson.pmf(j, exp_gol_trasferta)
 
-    matrice_p = np.zeros((6, 6))
-    for i in range(6):
-        for j in range(6):
-            matrice_p[i, j] = poisson.pmf(i, lambda_casa) * poisson.pmf(j, lambda_trasferta) * 100
+    # Normalizzazione probabilità
+    matrice_p = matrice_p / np.sum(matrice_p)
 
-    raw_prob_1 = np.sum(np.tril(matrice_p, -1))
-    raw_prob_x = np.sum(np.diag(matrice_p))
-    raw_prob_2 = np.sum(np.triu(matrice_p, 1))
+    prob_1 = np.sum(np.tril(matrice_p, -1))
+    prob_x = np.sum(np.diag(matrice_p))
+    prob_2 = np.sum(np.triu(matrice_p, 1))
 
-    if g_c > g_t:
-        prob_1 = max(raw_prob_1, raw_prob_x + 5.0, raw_prob_2 + 5.0)
-        rem = 100.0 - prob_1
-        prob_x = rem * (raw_prob_x / (raw_prob_x + raw_prob_2)) if (raw_prob_x + raw_prob_2) > 0 else rem / 2
-        prob_2 = rem * (raw_prob_2 / (raw_prob_x + raw_prob_2)) if (raw_prob_x + raw_prob_2) > 0 else rem / 2
-    elif g_c < g_t:
-        prob_2 = max(raw_prob_2, raw_prob_1 + 5.0, raw_prob_x + 5.0)
-        rem = 100.0 - prob_2
-        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_x)) if (raw_prob_1 + raw_prob_x) > 0 else rem / 2
-        prob_x = rem * (raw_prob_x / (raw_prob_1 + raw_prob_x)) if (raw_prob_1 + raw_prob_x) > 0 else rem / 2
-    else:
-        prob_x = max(raw_prob_x, raw_prob_1 + 2.0, raw_prob_2 + 2.0)
-        rem = 100.0 - prob_x
-        prob_1 = rem * (raw_prob_1 / (raw_prob_1 + raw_prob_2)) if (raw_prob_1 + raw_prob_2) > 0 else rem / 2
-        prob_2 = rem * (raw_prob_2 / (raw_prob_1 + raw_prob_2)) if (raw_prob_1 + raw_prob_2) > 0 else rem / 2
+    # Risultato più probabile
+    idx_max = np.unravel_index(np.argmax(matrice_p, axis=None), matrice_p.shape)
+    g_casa_pred = idx_max[0]
+    g_trasferta_pred = idx_max[1]
+    prob_esatto = matrice_p[g_casa_pred, g_trasferta_pred]
 
-    prob_exact = matrice_p[min(g_c, 5), min(g_t, 5)]
-
-    return prob_1, prob_x, prob_2, g_c, g_t, prob_exact, lambda_casa, lambda_trasferta, matrice_p
+    return prob_1, prob_x, prob_2, g_casa_pred, g_trasferta_pred, prob_esatto, exp_gol_casa, exp_gol_trasferta, matrice_p
 
 def calcola_probabilita_scommesse(matrice_p, prob_1, prob_x, prob_2):
-    """Calcola le probabilità e le quote eque per Under/Over, Gol/NoGol e Doppia Chance."""
-    tot_goals_matrix = np.fromfunction(lambda i, j: i + j, (6, 6), dtype=int)
-    
-    under15 = np.sum(matrice_p[tot_goals_matrix < 1.5])
-    over15 = np.sum(matrice_p[tot_goals_matrix > 1.5])
-    
-    under25 = np.sum(matrice_p[tot_goals_matrix < 2.5])
-    over25 = np.sum(matrice_p[tot_goals_matrix > 2.5])
-    
-    under35 = np.sum(matrice_p[tot_goals_matrix < 3.5])
-    over35 = np.sum(matrice_p[tot_goals_matrix > 3.5])
+    """Genera la tabella con probabilità di scommessa e quote eque stimate."""
+    prob_over15 = np.sum([matrice_p[i, j] for i in range(6) for j in range(6) if (i + j) > 1.5])
+    prob_over25 = np.sum([matrice_p[i, j] for i in range(6) for j in range(6) if (i + j) > 2.5])
+    prob_gg = np.sum([matrice_p[i, j] for i in range(1, 6) for j in range(1, 6)])
 
-    nogol = np.sum(matrice_p[0, :]) + np.sum(matrice_p[1:, 0])
-    gol = 100.0 - nogol
-
-    dc_1x = min(99.0, prob_1 + prob_x)
-    dc_x2 = min(99.0, prob_x + prob_2)
-    dc_12 = min(99.0, prob_1 + prob_2)
-
-    def fair_odds(prob):
-        return round(100.0 / prob, 2) if prob > 0 else 99.0
-
-    scommesse_data = [
-        {"Mercato": "Esito Finale (1X2)", "Esito": "1", "Probabilità": f"{prob_1:.1f}%", "Quota Equa": f"{fair_odds(prob_1):.2f}"},
-        {"Mercato": "Esito Finale (1X2)", "Esito": "X", "Probabilità": f"{prob_x:.1f}%", "Quota Equa": f"{fair_odds(prob_x):.2f}"},
-        {"Mercato": "Esito Finale (1X2)", "Esito": "2", "Probabilità": f"{prob_2:.1f}%", "Quota Equa": f"{fair_odds(prob_2):.2f}"},
-        
-        {"Mercato": "Doppia Chance", "Esito": "1X", "Probabilità": f"{dc_1x:.1f}%", "Quota Equa": f"{fair_odds(dc_1x):.2f}"},
-        {"Mercato": "Doppia Chance", "Esito": "X2", "Probabilità": f"{dc_x2:.1f}%", "Quota Equa": f"{fair_odds(dc_x2):.2f}"},
-        {"Mercato": "Doppia Chance", "Esito": "12", "Probabilità": f"{dc_12:.1f}%", "Quota Equa": f"{fair_odds(dc_12):.2f}"},
-        
-        {"Mercato": "Under / Over 1.5", "Esito": "Under 1.5", "Probabilità": f"{under15:.1f}%", "Quota Equa": f"{fair_odds(under15):.2f}"},
-        {"Mercato": "Under / Over 1.5", "Esito": "Over 1.5", "Probabilità": f"{over15:.1f}%", "Quota Equa": f"{fair_odds(over15):.2f}"},
-        
-        {"Mercato": "Under / Over 2.5", "Esito": "Under 2.5", "Probabilità": f"{under25:.1f}%", "Quota Equa": f"{fair_odds(under25):.2f}"},
-        {"Mercato": "Under / Over 2.5", "Esito": "Over 2.5", "Probabilità": f"{over25:.1f}%", "Quota Equa": f"{fair_odds(over25):.2f}"},
-        
-        {"Mercato": "Under / Over 3.5", "Esito": "Under 3.5", "Probabilità": f"{under35:.1f}%", "Quota Equa": f"{fair_odds(under35):.2f}"},
-        {"Mercato": "Under / Over 3.5", "Esito": "Over 3.5", "Probabilità": f"{over35:.1f}%", "Quota Equa": f"{fair_odds(over35):.2f}"},
-        
-        {"Mercato": "Gol / NoGol", "Esito": "Gol", "Probabilità": f"{gol:.1f}%", "Quota Equa": f"{fair_odds(gol):.2f}"},
-        {"Mercato": "Gol / NoGol", "Esito": "NoGol", "Probabilità": f"{nogol:.1f}%", "Quota Equa": f"{fair_odds(nogol):.2f}"},
+    data = [
+        {"Mercato": "1 (Vittoria Casa)", "Probabilità": f"{prob_1*100:.1f}%", "Quota Equa": f"{1/prob_1:.2f}" if prob_1 > 0 else "N/A"},
+        {"Mercato": "X (Pareggio)", "Probabilità": f"{prob_x*100:.1f}%", "Quota Equa": f"{1/prob_x:.2f}" if prob_x > 0 else "N/A"},
+        {"Mercato": "2 (Vittoria Trasferta)", "Probabilità": f"{prob_2*100:.1f}%", "Quota Equa": f"{1/prob_2:.2f}" if prob_2 > 0 else "N/A"},
+        {"Mercato": "Gol / Gol (Entrambe segnano)", "Probabilità": f"{prob_gg*100:.1f}%", "Quota Equa": f"{1/prob_gg:.2f}" if prob_gg > 0 else "N/A"},
+        {"Mercato": "Over 1.5 Gol", "Probabilità": f"{prob_over15*100:.1f}%", "Quota Equa": f"{1/prob_over15:.2f}" if prob_over15 > 0 else "N/A"},
+        {"Mercato": "Over 2.5 Gol", "Probabilità": f"{prob_over25*100:.1f}%", "Quota Equa": f"{1/prob_over25:.2f}" if prob_over25 > 0 else "N/A"}
     ]
-
-    return pd.DataFrame(scommesse_data)
+    return pd.DataFrame(data)
 
 def genera_plotly_heatmap(matrice_p, squadra_casa, squadra_trasferta):
-    """Genera una matrice Heatmap interattiva con Plotly per i risultati esatti."""
-    gol_labels = ["0", "1", "2", "3", "4", "5"]
+    """Genera la Heatmap interattiva della distribuzione dei gol stimata."""
+    z_data = (matrice_p[:5, :5] * 100).round(1)
     
-    annotations = []
-    for i in range(6):
-        for j in range(6):
-            val = matrice_p[i, j]
-            annotations.append(
-                dict(
-                    x=gol_labels[j],
-                    y=gol_labels[i],
-                    text=f"{val:.1f}%",
-                    font=dict(color="white" if val < np.max(matrice_p)*0.7 else "black", size=11, family="sans-serif"),
-                    showarrow=False
-                )
-            )
-
     fig = go.Figure(data=go.Heatmap(
-        z=matrice_p,
-        x=gol_labels,
-        y=gol_labels,
+        z=z_data,
+        x=[f"{squadra_trasferta} {i}" for i in range(5)],
+        y=[f"{squadra_casa} {i}" for i in range(5)],
         colorscale='Viridis',
-        hoverinfo='x+y+z',
-        hovertemplate=f'Gol {squadra_casa}: %{{y}}<br>Gol {squadra_trasferta}: %{{x}}<br>Probabilità: %{{z:.2f}}%<extra></extra>'
+        text=z_data,
+        texttemplate="%{text}%",
+        textfont={"size": 12},
+        hoverongaps=False
     ))
 
     fig.update_layout(
-        title=f"<b>Matrice Probabilità Risultati Esatti</b><br><sup>{squadra_casa} (Righe) vs {squadra_trasferta} (Colonne)</sup>",
-        title_x=0.5,
-        title_font=dict(size=15, color="#f8fafc"),
-        xaxis=dict(title=f"Gol {squadra_trasferta}", title_font=dict(color="#94a3b8"), tickfont=dict(color="#f8fafc")),
-        yaxis=dict(title=f"Gol {squadra_casa}", title_font=dict(color="#94a3b8"), tickfont=dict(color="#f8fafc"), autorange='reversed'),
+        title="🔥 Distribution Matrix Risultati Esatti (%)",
+        xaxis_title=f"Gol {squadra_trasferta}",
+        yaxis_title=f"Gol {squadra_casa}",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        annotations=annotations,
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=400
+        font=dict(color="#f8fafc")
     )
     return fig
 
-def render_form_badges(form_list):
-    """Genera l'HTML per mostrare i badge visuali della forma (W/D/L)."""
-    if not form_list:
-        return '<span style="color: #94a3b8; font-size: 12px;">Dati non disponibili</span>'
-    
-    html = ""
-    for r in form_list:
-        badge_class = r if r in ["W", "D", "L"] else "D"
-        html += f'<span class="form-badge form-{badge_class}">{r}</span>'
-    return html
-
-def get_team_key_players(team_name, scorers_by_team, stats_squadre):
-    """Restituisce i marcatori reali o genera un profilo stimato."""
-    if team_name in scorers_by_team and scorers_by_team[team_name]:
-        return scorers_by_team[team_name]
-    
-    st_team = stats_squadre.get(team_name, {"tot_gf": 10})
-    tot_gf = max(1, st_team.get("tot_gf", 10))
-    
-    return [
-        {
-            "name": "Principale Riferimento Offensivo",
-            "position": "Attaccante",
-            "goals": max(1, int(tot_gf * 0.30)),
-            "assists": 1,
-            "penalties": 0,
-            "playedMatches": "-",
-            "is_fallback": True
-        },
-        {
-            "name": "Seconda Punta / Rigorista",
-            "position": "Attaccante/Centrocampista",
-            "goals": max(1, int(tot_gf * 0.20)),
-            "assists": 2,
-            "penalties": 0,
-            "playedMatches": "-",
-            "is_fallback": True
-        }
-    ]
-    
-    # Aggiungi questa funzione in fondo al file utils.py
-
 def estrai_formazioni_match(match_data):
     """
-    Estrae le formazioni ufficiali, i moduli e i panchinari 
-    dall'oggetto match dell'API di football-data.org.
+    Estrae le formazioni ufficiali, i moduli, gli allenatori e i panchinari 
+    dall'oggetto match restituito dall'API di football-data.org.
     """
     home_team = match_data.get("homeTeam", {})
     away_team = match_data.get("awayTeam", {})
@@ -213,7 +129,6 @@ def estrai_formazioni_match(match_data):
     home_coach = home_team.get("coach", {}).get("name", "N/D")
     away_coach = away_team.get("coach", {}).get("name", "N/D")
 
-    # Verifica se le formazioni sono state comunicate dall'API
     disponibili = len(home_lineup) > 0 and len(away_lineup) > 0
 
     return {
@@ -231,3 +146,13 @@ def estrai_formazioni_match(match_data):
             "bench": away_bench
         }
     }
+
+def get_team_key_players(squadra, marcatori_dict, stats_squadre):
+    """Recupera i giocatori chiave di una squadra o fornisce un fallback generico."""
+    if squadra in marcatori_dict and marcatori_dict[squadra]:
+        return marcatori_dict[squadra]
+    
+    return [
+        {"name": "Top Scorer di Squadra", "goals": "Leader reti", "is_fallback": True},
+        {"name": "Riferimento Offensivo", "goals": "Titolare", "is_fallback": True}
+    ]
