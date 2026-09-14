@@ -5,7 +5,8 @@ from datetime import datetime
 from utils import (
     calcola_moltiplicatore_forma, calcola_pronostico,
     calcola_probabilita_scommesse, genera_plotly_heatmap,
-    render_form_badges, get_team_key_players
+    render_form_badges, get_team_key_players,
+    estrai_formazioni_match
 )
 
 st.set_page_config(page_title="Serie A Predictor", page_icon="⚽", layout="centered")
@@ -48,7 +49,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-API_TOKEN = st.secrets["API_TOKEN"]
+API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
 HEADERS = {"X-Auth-Token": API_TOKEN}
 
 if "show_standings" not in st.session_state:
@@ -244,7 +245,7 @@ def mostra_verifica_pronostici(partite_giornata, stats_squadre):
     df_report = pd.DataFrame(report_data)
     st.dataframe(df_report, hide_index=True, use_container_width=True)
 
-# LAYOUT
+# LAYOUT PRINCIPALE
 col_title, col_btn = st.columns([3, 1])
 with col_title:
     st.title("⚽ Serie A Hub")
@@ -354,6 +355,40 @@ if successo and tutte_le_partite:
             st.markdown("---")
             fig_heatmap = genera_plotly_heatmap(matrice_p, casa, trasferta)
             st.plotly_chart(fig_heatmap, use_container_width=True)
+
+            # FORMAZIONI UFFICIALI
+            st.markdown("---")
+            st.subheader("📋 Formazioni Ufficiali")
+            formazioni = estrai_formazioni_match(match)
+
+            if formazioni["disponibili"]:
+                col_f_casa, col_f_trasferta = st.columns(2)
+
+                with col_f_casa:
+                    st.markdown(f"### 🏠 {casa}")
+                    st.caption(f"**Modulo:** {formazioni['home']['formation']} | **All:** {formazioni['home']['coach']}")
+                    st.markdown("**Titolari:**")
+                    for p in formazioni["home"]["lineup"]:
+                        pos = f"({p.get('position', 'N/D')})" if p.get('position') else ""
+                        st.write(f"• **{p.get('shirtNumber', '')}** {p.get('name', '')} {pos}")
+                    
+                    with st.expander("🔄 Panchina Casa"):
+                        for p in formazioni["home"]["bench"]:
+                            st.write(f"• {p.get('shirtNumber', '')} {p.get('name', '')}")
+
+                with col_f_trasferta:
+                    st.markdown(f"### ✈️ {trasferta}")
+                    st.caption(f"**Modulo:** {formazioni['away']['formation']} | **All:** {formazioni['away']['coach']}")
+                    st.markdown("**Titolari:**")
+                    for p in formazioni["away"]["lineup"]:
+                        pos = f"({p.get('position', 'N/D')})" if p.get('position') else ""
+                        st.write(f"• **{p.get('shirtNumber', '')}** {p.get('name', '')} {pos}")
+
+                    with st.expander("🔄 Panchina Trasferta"):
+                        for p in formazioni["away"]["bench"]:
+                            st.write(f"• {p.get('shirtNumber', '')} {p.get('name', '')}")
+            else:
+                st.info("🕒 **Formazioni ufficiali non ancora disponibili.** Verranno pubblicate dall'API circa 45-60 minuti prima del fischio d'inizio.")
 
             st.markdown("---")
             st.subheader("⭐ Giocatori Chiave da Monitorare")
