@@ -22,12 +22,13 @@ st.markdown("""
         border: 1px solid #334155;
     }
     .player-card {
-        background-color: #0f172a;
-        border-radius: 8px;
-        padding: 12px;
-        margin-top: 8px;
-        border-left: 4px solid #38bdf8;
-    }
+    background-color: #1e293b; /* Sfondo scuro elegante */
+    color: #ffffff;            /* Carattere BIANCO ben leggibile */
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 8px;
+    border-left: 4px solid #38bdf8; /* Bordo azzurro di accento */
+}
     .vs-header {
         font-size: 22px;
         font-weight: bold;
