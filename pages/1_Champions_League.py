@@ -5,7 +5,8 @@ from datetime import datetime
 from utils import (
     calcola_moltiplicatore_forma, calcola_pronostico,
     calcola_probabilita_scommesse, genera_plotly_heatmap,
-    render_form_badges, get_team_key_players
+    render_form_badges, get_team_key_players,
+    estrai_formazioni_match
 )
 
 st.set_page_config(page_title="Champions League Predictor", page_icon="🇪🇺", layout="centered")
@@ -48,12 +49,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-API_TOKEN = st.secrets["API_TOKEN"]
+API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
 HEADERS = {"X-Auth-Token": API_TOKEN}
 
 @st.cache_data(ttl=1800)
 def fetch_all_cl_matches():
-    """Recupera tutte le partite di Champions League (Codice API: CL)."""
     url = "https://api.football-data.org/v4/competitions/CL/matches"
     try:
         response = requests.get(url, headers=HEADERS, timeout=8)
@@ -61,7 +61,6 @@ def fetch_all_cl_matches():
             data = response.json()
             matches = data.get("matches", [])
             
-            # Mappatura delle giornate/fasi
             stages = []
             for m in matches:
                 stage = m.get("stage")
@@ -76,7 +75,6 @@ def fetch_all_cl_matches():
 
 @st.cache_data(ttl=1800)
 def fetch_cl_team_stats():
-    """Calcola le statistiche generali basandosi sulle partite della stagione corrente."""
     url = "https://api.football-data.org/v4/competitions/CL/matches"
     stats = {}
     try:
@@ -85,7 +83,6 @@ def fetch_cl_team_stats():
             matches = response.json().get("matches", [])
             finished = [m for m in matches if m.get("status") == "FINISHED"]
             
-            # Inizializza squadre
             for m in matches:
                 h = m["homeTeam"]["name"]
                 a = m["awayTeam"]["name"]
@@ -116,7 +113,6 @@ def fetch_cl_team_stats():
                     stats[h]["results"].append("D")
                     stats[a]["results"].append("D")
 
-            # Formatta il dizionario
             formatted_stats = {}
             for t_name, data in stats.items():
                 p = max(1, data["played"])
@@ -169,7 +165,6 @@ marcatori = fetch_cl_top_scorers()
 if success and matches:
     fase_selezionata = st.selectbox("🏆 **Seleziona la Fase / Giornata:**", options=stages)
     
-    # Filtra partite per la fase scelta
     partite_fase = []
     for m in matches:
         label = f"Matchday {m.get('matchday')}" if m.get('matchday') else m.get('stage', '').replace("_", " ").title()
@@ -232,6 +227,40 @@ if success and matches:
         st.markdown("---")
         fig_heatmap = genera_plotly_heatmap(matrice_p, casa, trasferta)
         st.plotly_chart(fig_heatmap, use_container_width=True)
+
+        # FORMAZIONI UFFICIALI
+        st.markdown("---")
+        st.subheader("📋 Formazioni Ufficiali")
+        formazioni = estrai_formazioni_match(match)
+
+        if formazioni["disponibili"]:
+            col_f_casa, col_f_trasferta = st.columns(2)
+
+            with col_f_casa:
+                st.markdown(f"### 🏠 {casa}")
+                st.caption(f"**Modulo:** {formazioni['home']['formation']} | **All:** {formazioni['home']['coach']}")
+                st.markdown("**Titolari:**")
+                for p in formazioni["home"]["lineup"]:
+                    pos = f"({p.get('position', 'N/D')})" if p.get('position') else ""
+                    st.write(f"• **{p.get('shirtNumber', '')}** {p.get('name', '')} {pos}")
+                
+                with st.expander("🔄 Panchina Casa"):
+                    for p in formazioni["home"]["bench"]:
+                        st.write(f"• {p.get('shirtNumber', '')} {p.get('name', '')}")
+
+            with col_f_trasferta:
+                st.markdown(f"### ✈️ {trasferta}")
+                st.caption(f"**Modulo:** {formazioni['away']['formation']} | **All:** {formazioni['away']['coach']}")
+                st.markdown("**Titolari:**")
+                for p in formazioni["away"]["lineup"]:
+                    pos = f"({p.get('position', 'N/D')})" if p.get('position') else ""
+                    st.write(f"• **{p.get('shirtNumber', '')}** {p.get('name', '')} {pos}")
+
+                with st.expander("🔄 Panchina Trasferta"):
+                    for p in formazioni["away"]["bench"]:
+                        st.write(f"• {p.get('shirtNumber', '')} {p.get('name', '')}")
+        else:
+            st.info("🕒 **Formazioni ufficiali non ancora disponibili.** Verranno pubblicate dall'API circa 45-60 minuti prima del fischio d'inizio.")
 
         st.markdown("---")
         st.subheader("⭐ Giocatori Chiave da Monitorare")
