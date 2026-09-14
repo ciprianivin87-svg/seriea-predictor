@@ -190,3 +190,44 @@ def get_team_key_players(team_name, scorers_by_team, stats_squadre):
             "is_fallback": True
         }
     ]
+    
+    # Aggiungi questa funzione in fondo al file utils.py
+
+def estrai_formazioni_match(match_data):
+    """
+    Estrae le formazioni ufficiali, i moduli e i panchinari 
+    dall'oggetto match dell'API di football-data.org.
+    """
+    home_team = match_data.get("homeTeam", {})
+    away_team = match_data.get("awayTeam", {})
+
+    home_lineup = home_team.get("lineup", [])
+    away_lineup = away_team.get("lineup", [])
+    
+    home_bench = home_team.get("bench", [])
+    away_bench = away_team.get("bench", [])
+
+    home_formation = home_team.get("formation", "N/D")
+    away_formation = away_team.get("formation", "N/D")
+
+    home_coach = home_team.get("coach", {}).get("name", "N/D")
+    away_coach = away_team.get("coach", {}).get("name", "N/D")
+
+    # Verifica se le formazioni sono state comunicate dall'API
+    disponibili = len(home_lineup) > 0 and len(away_lineup) > 0
+
+    return {
+        "disponibili": disponibili,
+        "home": {
+            "formation": home_formation,
+            "coach": home_coach,
+            "lineup": home_lineup,
+            "bench": home_bench
+        },
+        "away": {
+            "formation": away_formation,
+            "coach": away_coach,
+            "lineup": away_lineup,
+            "bench": away_bench
+        }
+    }
