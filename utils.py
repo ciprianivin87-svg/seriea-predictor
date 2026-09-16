@@ -110,14 +110,19 @@ def calcola_probabilita_scommesse(matrice, prob_1, prob_x, prob_2):
 
 # 5. HEATMAP PLOTLY
 def genera_plotly_heatmap(matrice, casa, trasferta):
+    # Arrotondiamo la matrice a 1 cifra decimale per la visualizzazione del testo
+    matrice_perc = np.round(matrice * 100, 1)
+
     fig = go.Figure(data=go.Heatmap(
-        z=matrice * 100,
+        z=matrice_perc,
         x=[0, 1, 2, 3, 4, 5],
         y=[0, 1, 2, 3, 4, 5],
         colorscale='Viridis',
-        texttemplate="%{z:.1f}%",
-        textcellsformat=".1f"
+        text=matrice_perc,
+        texttemplate="%{text}%",
+        hovertemplate=f"Gol {casa}: %{{y}}<br>Gol {trasferta}: %{{x}}<br>Probabilità: %{{z:.1f}}%<extra></extra>"
     ))
+    
     fig.update_layout(
         title=f"Matrice Risultati Esatti: {casa} vs {trasferta}",
         xaxis_title=f"Gol {trasferta}",
