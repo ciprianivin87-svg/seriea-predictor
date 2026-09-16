@@ -1,10 +1,10 @@
 import streamlit as st
-import google.generativeai as genai
 
-# 1. GENERATORE REPORT GEMINI
-@st.cache_data(ttl=3600)
-def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
-    # ... resto del codice ...
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
 # 1. GENERATORE REPORT GEMINI
 @st.cache_data(ttl=3600)
 def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
@@ -17,7 +17,6 @@ def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, pr
             return "⚠️ Chiave GEMINI_API_KEY non trovata nei Secrets di Streamlit."
         
         genai.configure(api_key=api_key)
-        # Modello aggiornato
         model = genai.GenerativeModel('gemini-3.6-flash')
 
         pos_c = st_c.get('pos', 'N/D')
