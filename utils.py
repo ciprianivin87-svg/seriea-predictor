@@ -1,16 +1,25 @@
-import streamlit as st  # <--- AGGIUNGI QUESTA RIGA IN CIMA AL FILE
-import google.generativeai as genai
+import streamlit as st
+import numpy as np
+import pandas as pd
+from scipy.stats import poisson
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
 @st.cache_data(ttl=3600)
 def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
     """Genera un report tattico e discorsivo stile Sofascore usando Gemini AI."""
+    if genai is None:
+        return "⚠️ La libreria google-generativeai non è installata nel sistema."
+        
     try:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
             return "⚠️ Chiave GEMINI_API_KEY non trovata nei Secrets di Streamlit."
         
         genai.configure(api_key=api_key)
-        
-        # Usiamo il modello aggiornato
         model = genai.GenerativeModel('gemini-2.5-flash')
 
         pos_c = st_c.get('pos', 'N/D')
