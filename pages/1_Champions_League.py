@@ -21,46 +21,62 @@ st.set_page_config(
 st.title("🇪🇺 UEFA Champions League - Predictor & Analisi Tattica")
 st.markdown("Analisi predittiva basata sulla distribuzione di Poisson integrata con reportistica tattica generata da intelligenza artificiale.")
 
-# --- DATI STATISTICI SQUADRE (Struttura identica a Serie A) ---
+# --- DATI STATISTICI SQUADRE CHAMPIONS LEAGUE ---
 stats_squadre_cl = {
-    "Real Madrid": {"pos": 1, "punti": 15, "gf": 2.40, "ga": 0.80, "form_list": ['W', 'W', 'D', 'W', 'W']},
-    "Manchester City": {"pos": 2, "punti": 13, "gf": 2.60, "ga": 1.00, "form_list": ['W', 'D', 'W', 'W', 'L']},
-    "Bayern Monaco": {"pos": 3, "punti": 12, "gf": 2.20, "ga": 0.90, "form_list": ['W', 'W', 'L', 'W', 'W']},
-    "Inter": {"pos": 4, "punti": 12, "gf": 1.80, "ga": 0.60, "form_list": ['W', 'W', 'W', 'D', 'W']},
-    "PSG": {"pos": 5, "punti": 10, "gf": 2.00, "ga": 1.10, "form_list": ['D', 'W', 'W', 'L', 'W']},
-    "Barcelona": {"pos": 6, "punti": 10, "gf": 2.30, "ga": 1.20, "form_list": ['W', 'L', 'W', 'W', 'D']},
-    "Arsenal": {"pos": 7, "punti": 10, "gf": 1.90, "ga": 0.70, "form_list": ['W', 'W', 'D', 'W', 'L']},
-    "Bayer Leverkusen": {"pos": 8, "punti": 9, "gf": 2.10, "ga": 1.30, "form_list": ['D', 'W', 'W', 'D', 'W']},
-    "Juventus": {"pos": 9, "punti": 8, "gf": 1.50, "ga": 0.80, "form_list": ['D', 'D', 'W', 'D', 'W']},
-    "Atalanta": {"pos": 10, "punti": 8, "gf": 2.00, "ga": 1.20, "form_list": ['W', 'W', 'L', 'W', 'D']}
+    "Real Madrid": {"pos": 1, "punti": 3, "gf": 2.00, "ga": 1.00, "form_list": ['W', 'W', 'W', 'D', 'W']},
+    "Inter": {"pos": 2, "punti": 0, "gf": 1.00, "ga": 2.00, "form_list": ['L', 'W', 'W', 'D', 'W']},
+    "Barcelona": {"pos": 3, "punti": 3, "gf": 5.00, "ga": 1.00, "form_list": ['W', 'W', 'L', 'W', 'W']},
+    "Bayern Monaco": {"pos": 4, "punti": 3, "gf": 5.00, "ga": 0.00, "form_list": ['W', 'W', 'W', 'W', 'D']},
+    "Manchester City": {"pos": 5, "punti": 3, "gf": 2.00, "ga": 0.00, "form_list": ['W', 'D', 'W', 'W', 'L']},
+    "Arsenal": {"pos": 6, "punti": 3, "gf": 1.00, "ga": 0.00, "form_list": ['W', 'W', 'D', 'W', 'D']},
+    "PSG": {"pos": 7, "punti": 3, "gf": 6.00, "ga": 1.00, "form_list": ['W', 'D', 'W', 'L', 'W']},
+    "Liverpool": {"pos": 8, "punti": 3, "gf": 2.00, "ga": 1.00, "form_list": ['W', 'W', 'W', 'W', 'L']},
+    "Napoli": {"pos": 9, "punti": 0, "gf": 0.00, "ga": 1.00, "form_list": ['L', 'W', 'D', 'W', 'W']},
+    "Atletico Madrid": {"pos": 10, "punti": 0, "gf": 1.00, "ga": 2.00, "form_list": ['L', 'D', 'W', 'W', 'D']},
+    "Borussia Dortmund": {"pos": 11, "punti": 3, "gf": 3.00, "ga": 2.00, "form_list": ['W', 'W', 'L', 'W', 'W']},
+    "Bayer Leverkusen": {"pos": 12, "punti": 1, "gf": 0.00, "ga": 0.00, "form_list": ['D', 'W', 'W', 'D', 'W']},
+    "Juventus": {"pos": 13, "punti": 1, "gf": 0.00, "ga": 0.00, "form_list": ['D', 'D', 'W', 'D', 'W']},
+    "Club Brugge": {"pos": 14, "punti": 0, "gf": 2.00, "ga": 3.00, "form_list": ['L', 'W', 'W', 'D', 'L']},
+    "Sporting CP": {"pos": 15, "punti": 3, "gf": 3.00, "ga": 1.00, "form_list": ['W', 'W', 'W', 'W', 'D']},
+    "Feyenoord": {"pos": 16, "punti": 0, "gf": 1.00, "ga": 5.00, "form_list": ['L', 'D', 'W', 'D', 'W']},
+    "Lens": {"pos": 17, "punti": 3, "gf": 3.00, "ga": 2.00, "form_list": ['W', 'D', 'W', 'W', 'D']},
+    "Galatasaray": {"pos": 18, "punti": 0, "gf": 1.00, "ga": 3.00, "form_list": ['L', 'W', 'W', 'D', 'W']},
+    "Villarreal": {"pos": 19, "punti": 0, "gf": 2.00, "ga": 3.00, "form_list": ['L', 'W', 'D', 'W', 'L']},
+    "RB Leipzig": {"pos": 20, "punti": 0, "gf": 1.00, "ga": 4.00, "form_list": ['L', 'L', 'W', 'W', 'D']},
+    "PSV": {"pos": 21, "punti": 1, "gf": 1.00, "ga": 1.00, "form_list": ['D', 'W', 'W', 'W', 'L']},
+    "Como": {"pos": 22, "punti": 3, "gf": 4.00, "ga": 1.00, "form_list": ['W', 'W', 'D', 'W', 'D']}
 }
 
-# --- CALENDARIO PROGRAMMATO (Giornate della Fase a Gironi/Fase Unica) ---
+# --- CALENDARIO PROGRAMMATO (Partite Reali Fase Unica UCL) ---
 calendario_cl = {
-    "Giornata 1": [
-        ("Real Madrid", "PSG"),
-        ("Manchester City", "Inter"),
-        ("Bayern Monaco", "Barcelona"),
-        ("Arsenal", "Juventus"),
-        ("Bayer Leverkusen", "Atalanta")
+    "Giornata 2 (13-14 Ottobre)": [
+        ("Inter", "Club Brugge"),
+        ("Galatasaray", "Barcelona"),
+        ("Arsenal", "Lens"),
+        ("Atletico Madrid", "Manchester City"),
+        ("Villarreal", "Napoli"),
+        ("RB Leipzig", "PSV"),
+        ("Feyenoord", "Como")
     ],
-    "Giornata 2": [
-        ("Barcelona", "Real Madrid"),
-        ("Inter", "Bayern Monaco"),
-        ("PSG", "Manchester City"),
-        ("Juventus", "Bayer Leverkusen"),
-        ("Atalanta", "Arsenal")
+    "Giornata 3 (20-21 Ottobre)": [
+        ("Real Madrid", "Borussia Dortmund"),
+        ("Barcelona", "Bayern Monaco"),
+        ("PSG", "Atletico Madrid"),
+        ("Liverpool", "Bayer Leverkusen"),
+        ("Juventus", "Sporting CP"),
+        ("Napoli", "Inter")
     ],
-    "Giornata 3": [
-        ("Real Madrid", "Manchester City"),
-        ("Bayern Monaco", "PSG"),
-        ("Inter", "Barcelona"),
-        ("Arsenal", "Bayer Leverkusen"),
-        ("Atalanta", "Juventus")
+    "Giornata 1 (Risultati recenti)": [
+        ("Real Madrid", "Inter"),
+        ("Barcelona", "Feyenoord"),
+        ("Napoli", "Arsenal"),
+        ("Liverpool", "Atletico Madrid"),
+        ("Bayern Monaco", "Club Brugge"),
+        ("Como", "RB Leipzig")
     ]
 }
 
-# --- SELEZIONE GIORNATA E MATCH (Identico a Serie A) ---
+# --- SELEZIONE GIORNATA E MATCH ---
 st.subheader("📅 Calendario & Partite Programmate")
 col_giornata, col_partita = st.columns(2)
 
