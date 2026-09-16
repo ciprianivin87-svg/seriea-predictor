@@ -1,3 +1,10 @@
+import streamlit as st
+import google.generativeai as genai
+
+# 1. GENERATORE REPORT GEMINI
+@st.cache_data(ttl=3600)
+def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
+    # ... resto del codice ...
 # 1. GENERATORE REPORT GEMINI
 @st.cache_data(ttl=3600)
 def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
