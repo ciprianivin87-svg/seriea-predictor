@@ -1,10 +1,3 @@
-from utils import (
-    calcola_moltiplicatore_forma, calcola_pronostico,
-    calcola_probabilita_scommesse, genera_plotly_heatmap,
-    render_form_badges, get_team_key_players,
-    estrai_formazioni_match, genera_report_gemini  # <--- NUOVA IMPORTAZIONE
-)
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -13,7 +6,7 @@ from utils import (
     calcola_moltiplicatore_forma, calcola_pronostico,
     calcola_probabilita_scommesse, genera_plotly_heatmap,
     render_form_badges, get_team_key_players,
-    estrai_formazioni_match
+    estrai_formazioni_match, genera_report_gemini
 )
 
 st.set_page_config(page_title="Serie A Predictor", page_icon="⚽", layout="centered")
@@ -29,13 +22,13 @@ st.markdown("""
         border: 1px solid #334155;
     }
     .player-card {
-    background-color: #1e293b; /* Sfondo scuro elegante */
-    color: #ffffff;            /* Carattere BIANCO ben leggibile */
-    border-radius: 8px;
-    padding: 12px;
-    margin-top: 8px;
-    border-left: 4px solid #38bdf8; /* Bordo azzurro di accento */
-}
+        background-color: #1e293b;
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 8px;
+        border-left: 4px solid #38bdf8;
+    }
     .vs-header {
         font-size: 22px;
         font-weight: bold;
@@ -195,21 +188,7 @@ def fetch_top_scorers():
     except Exception:
         pass
     return scorers_by_team, all_scorers_list
-    
-st.markdown("---")
-st.subheader("🧠 Approfondimenti IA (Analisi Tattica)")
 
-with st.spinner("Generazione analisi in corso..."):
-    report_ai = genera_report_gemini(casa, trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t)
-
-st.markdown(
-    f"""
-    <div style="background-color: #1e293b; padding: 20px; border-radius: 10px; border-left: 5px solid #38bdf8; color: #f8fafc; line-height: 1.6;">
-        {report_ai}
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 def mostra_verifica_pronostici(partite_giornata, stats_squadre):
     partite_concluse = [m for m in partite_giornata if m.get("status") == "FINISHED"]
     if not partite_concluse:
@@ -378,6 +357,22 @@ if successo and tutte_le_partite:
             fig_heatmap = genera_plotly_heatmap(matrice_p, casa, trasferta)
             st.plotly_chart(fig_heatmap, use_container_width=True)
 
+            # APPROFONDIMENTI IA (GENERAZIONE GEMINI)
+            st.markdown("---")
+            st.subheader("🧠 Approfondimenti IA (Analisi Tattica)")
+
+            with st.spinner("Generazione analisi tattica in corso..."):
+                report_ai = genera_report_gemini(casa, trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t)
+
+            st.markdown(
+                f"""
+                <div style="background-color: #1e293b; padding: 20px; border-radius: 10px; border-left: 5px solid #38bdf8; color: #f8fafc; line-height: 1.6;">
+                    {report_ai}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
             # FORMAZIONI UFFICIALI
             st.markdown("---")
             st.subheader("📋 Formazioni Ufficiali")
@@ -412,6 +407,7 @@ if successo and tutte_le_partite:
             else:
                 st.info("🕒 **Formazioni ufficiali non ancora disponibili.** Verranno pubblicate dall'API circa 45-60 minuti prima del fischio d'inizio.")
 
+            # GIOCATORI CHIAVE DA MONITORARE
             st.markdown("---")
             st.subheader("⭐ Giocatori Chiave da Monitorare")
             p_col1, p_col2 = st.columns(2)
@@ -420,13 +416,19 @@ if successo and tutte_le_partite:
                 st.markdown(f"**Top Player {casa}**")
                 players_c = get_team_key_players(casa, classifica_marcatori, stats_squadre)
                 for p in players_c[:2]:
-                    st.markdown(f'<div class="player-card"><b>🏃 {p["name"]}</b><br>Gol: {p["goals"]}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="player-card"><b style="color: #ffffff;">🏃 {p["name"]}</b><br><span style="color: #cbd5e1;">Gol: {p["goals"]}</span></div>', 
+                        unsafe_allow_html=True
+                    )
 
             with p_col2:
                 st.markdown(f"**Top Player {trasferta}**")
                 players_t = get_team_key_players(trasferta, classifica_marcatori, stats_squadre)
                 for p in players_t[:2]:
-                    st.markdown(f'<div class="player-card"><b>🏃 {p["name"]}</b><br>Gol: {p["goals"]}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="player-card"><b style="color: #ffffff;">🏃 {p["name"]}</b><br><span style="color: #cbd5e1;">Gol: {p["goals"]}</span></div>', 
+                        unsafe_allow_html=True
+                    )
 
         with tab_verifica:
             mostra_verifica_pronostici(partite_giornata, stats_squadre)
