@@ -1,42 +1,121 @@
-# 1. GENERATORE REPORT GEMINI
-@st.cache_data(ttl=3600)
-def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
-    if genai is None:
-        return "⚠️ La libreria google-generativeai non è installata nei requisiti."
-        
-    try:
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key:
-            return "⚠️ Chiave GEMINI_API_KEY non trovata nei Secrets di Streamlit."
-        
-        genai.configure(api_key=api_key)
-        # Aggiornato a gemini-3.6-flash
-        model = genai.GenerativeModel('gemini-3.6-flash')
+import streamlit as st
+import pandas as pd
+import numpy as np
 
-        pos_c = st_c.get('pos', 'N/D')
-        pos_t = st_t.get('pos', 'N/D')
-        pt_c = st_c.get('punti', 'N/D')
-        pt_t = st_t.get('punti', 'N/D')
+# Importazione delle funzioni condivise da utils.py
+from utils import (
+    calcola_pronostico,
+    calcola_probabilita_scommesse,
+    genera_plotly_heatmap,
+    render_form_badges,
+    get_team_key_players,
+    estrai_formazioni_match,
+    genera_report_gemini
+)
 
-        prompt = f"""
-        Sei un analista tattico e giornalista sportivo professionista. 
-        Genera un'analisi pre-partita dinamica per l'incontro: {squadra_casa} vs {squadra_trasferta}.
+# Configurazione della pagina
+st.set_page_config(
+    page_title="Champions League Predictor",
+    page_icon="🇪🇺",
+    layout="wide"
+)
 
-        Dati a disposizione:
-        - Classifica: {squadra_casa} ({pos_c}° posto, {pt_c} pt) vs {squadra_trasferta} ({pos_t}° posto, {pt_t} pt)
-        - Efficacia Offensiva/Difensiva: {squadra_casa} ({st_c['gf']:.2f} gol fatti/gara, {st_c['ga']:.2f} subiti/gara) vs {squadra_trasferta} ({st_t['gf']:.2f} gol fatti/gara, {st_t['ga']:.2f} subiti/gara)
-        - Ultime 5 gare: {squadra_casa} ({st_c.get('form_list')}) vs {squadra_trasferta} ({st_t.get('form_list')})
-        - Stima algoritmo Poisson: Vittoria Casa {prob_1:.1f}%, Pareggio {prob_x:.1f}%, Vittoria Trasferta {prob_2:.1f}%. Risultato esatto più probabile: {g_c}-{g_t}.
+st.title("🇪🇺 UEFA Champions League - Predictor & Analisi Tattica")
+st.markdown("Analisi predittiva basata sulla distribuzione di Poisson integrata con reportistica tattica generata da intelligenza artificiale.")
 
-        Struttura la risposta in Markdown con 3 sezioni chiare:
-        1. **Contesto e Forma Attuale**: Breve panoramica sul momento delle due squadre.
-        2. **Prospettiva Tattica & Tendenze**: Come si incrociano i valori d'attacco e difesa delle due squadre.
-        3. **Previsione dell'Analista**: Considerazioni finali sul pronostico stimato.
+# --- DATI E STATISTICHE SQUADRE CHAMPIONS LEAGUE ---
+stats_squadre_cl = {
+    "Real Madrid": {"pos": 1, "punti": 15, "gf": 2.40, "ga": 0.80, "form_list": ['W', 'W', 'D', 'W', 'W']},
+    "Manchester City": {"pos": 2, "punti": 13, "gf": 2.60, "ga": 1.00, "form_list": ['W', 'D', 'W', 'W', 'L']},
+    "Bayern Monaco": {"pos": 3, "punti": 12, "gf": 2.20, "ga": 0.90, "form_list": ['W', 'W', 'L', 'W', 'W']},
+    "Inter": {"pos": 4, "punti": 12, "gf": 1.80, "ga": 0.60, "form_list": ['W', 'W', 'W', 'D', 'W']},
+    "PSG": {"pos": 5, "punti": 10, "gf": 2.00, "ga": 1.10, "form_list": ['D', 'W', 'W', 'L', 'W']},
+    "Barcelona": {"pos": 6, "punti": 10, "gf": 2.30, "ga": 1.20, "form_list": ['W', 'L', 'W', 'W', 'D']},
+    "Arsenal": {"pos": 7, "punti": 10, "gf": 1.90, "ga": 0.70, "form_list": ['W', 'W', 'D', 'W', 'L']},
+    "Bayer Leverkusen": {"pos": 8, "punti": 9, "gf": 2.10, "ga": 1.30, "form_list": ['D', 'W', 'W', 'D', 'W']},
+    "Juventus": {"pos": 9, "punti": 8, "gf": 1.50, "ga": 0.80, "form_list": ['D', 'D', 'W', 'D', 'W']},
+    "Atalanta": {"pos": 10, "punti": 8, "gf": 2.00, "ga": 1.20, "form_list": ['W', 'W', 'L', 'W', 'D']}
+}
 
-        Usa un tono giornalistico, chiaro, avvincente e conciso (massimo 180 parole in totale). Non inserire introduzioni generiche.
-        """
+squadre = sorted(list(stats_squadre_cl.keys()))
 
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"⚠️ Impossibile generare l'analisi al momento: {str(e)}"
+# --- SELEZIONE PARTITA ---
+st.subheader("⚽ Seleziona la Sfida")
+col_sel1, col_sel2 = st.columns(2)
+
+with col_sel1:
+    casa = st.selectbox("Squadra in Casa (1)", squadre, index=0)
+
+with col_sel2:
+    squadre_trasferta = [s for s in squadre if s != casa]
+    trasferta = st.selectbox("Squadra in Trasferta (2)", squadre_trasferta, index=0)
+
+st.divider()
+
+# Recupero dati e statistiche delle squadre
+st_casa = stats_squadre_cl[casa]
+st_trasf = stats_squadre_cl[trasferta]
+
+# --- CALCOLO PRONOSTICO POISSON ---
+prob_1, prob_x, prob_2, g_c, g_t, prob_exact, exp_c, exp_t, matrice_p = calcola_pronostico(
+    gf_c=st_casa['gf'],
+    ga_c=st_casa['ga'],
+    form_c=st_casa['form_list'],
+    gf_t=st_trasf['gf'],
+    ga_t=st_trasf['ga'],
+    form_t=st_trasf['form_list']
+)
+
+# --- HEADER RISULTATO E METRICHE ---
+col_h1, col_hx, col_h2 = st.columns([2, 1, 2])
+
+with col_h1:
+    st.subheader(f"🏠 {casa}")
+    st.markdown(f"**Forma recente:** {render_form_badges(st_casa['form_list'])}", unsafe_allow_html=True)
+    st.metric("Probabilità Vittoria", f"{prob_1:.1f}%")
+
+with col_hx:
+    st.markdown("<h3 style='text-align: center; margin-top: 20px;'>VS</h3>", unsafe_allow_html=True)
+    st.metric("Pareggio (X)", f"{prob_x:.1f}%")
+    st.markdown(f"<h4 style='text-align: center; color: #00FF66;'>{g_c} - {g_t}</h4>", unsafe_allow_html=True)
+    st.caption(f"Probabilità risultato esatto: {prob_exact:.1f}%")
+
+with col_h2:
+    st.subheader(f"🚀 {trasferta}")
+    st.markdown(f"**Forma recente:** {render_form_badges(st_trasf['form_list'])}", unsafe_allow_html=True)
+    st.metric("Probabilità Vittoria", f"{prob_2:.1f}%")
+
+st.divider()
+
+# --- GRAFICO HEATMAP E QUOTE SCOMMESSE ---
+col_tab1, col_tab2 = st.columns([1, 1])
+
+with col_tab1:
+    st.markdown("### 📊 Mercati & Quote Eque")
+    df_scommesse = calcola_probabilita_scommesse(matrice_p, prob_1, prob_x, prob_2)
+    st.dataframe(df_scommesse, use_container_width=True, hide_index=True)
+
+with col_tab2:
+    st.markdown("### 🎯 Matrice Risultati Esatti")
+    fig_heatmap = genera_plotly_heatmap(matrice_p, casa, trasferta)
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+
+st.divider()
+
+# --- SEZIONE APPROFONDIMENTI IA (GEMINI) ---
+st.markdown("### 🧠 Approfondimenti IA (Analisi Tattica)")
+
+with st.spinner("Generazione dell'analisi tattica in corso con Gemini..."):
+    report_ia = genera_report_gemini(
+        casa,
+        trasferta,
+        st_casa,
+        st_trasf,
+        prob_1,
+        prob_x,
+        prob_2,
+        g_c,
+        g_t
+    )
+
+st.markdown(report_ia)
