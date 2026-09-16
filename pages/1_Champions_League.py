@@ -8,8 +8,6 @@ from utils import (
     calcola_probabilita_scommesse,
     genera_plotly_heatmap,
     render_form_badges,
-    get_team_key_players,
-    estrai_formazioni_match,
     genera_report_gemini
 )
 
@@ -23,7 +21,7 @@ st.set_page_config(
 st.title("🇪🇺 UEFA Champions League - Predictor & Analisi Tattica")
 st.markdown("Analisi predittiva basata sulla distribuzione di Poisson integrata con reportistica tattica generata da intelligenza artificiale.")
 
-# --- DATI E STATISTICHE SQUADRE CHAMPIONS LEAGUE ---
+# --- DATI E STATISTICHE SQUADRE ---
 stats_squadre_cl = {
     "Real Madrid": {"pos": 1, "punti": 15, "gf": 2.40, "ga": 0.80, "form_list": ['W', 'W', 'D', 'W', 'W']},
     "Manchester City": {"pos": 2, "punti": 13, "gf": 2.60, "ga": 1.00, "form_list": ['W', 'D', 'W', 'W', 'L']},
@@ -37,22 +35,51 @@ stats_squadre_cl = {
     "Atalanta": {"pos": 10, "punti": 8, "gf": 2.00, "ga": 1.20, "form_list": ['W', 'W', 'L', 'W', 'D']}
 }
 
-squadre = sorted(list(stats_squadre_cl.keys()))
+# --- CALENDARIO E PARTITE PROGRAMMATE PER GIORNATA ---
+calendario_cl = {
+    "Giornata 1": [
+        ("Real Madrid", "PSG"),
+        ("Manchester City", "Inter"),
+        ("Bayern Monaco", "Barcelona"),
+        ("Arsenal", "Juventus"),
+        ("Bayer Leverkusen", "Atalanta")
+    ],
+    "Giornata 2": [
+        ("Barcelona", "Real Madrid"),
+        ("Inter", "Bayern Monaco"),
+        ("PSG", "Manchester City"),
+        ("Juventus", "Bayer Leverkusen"),
+        ("Atalanta", "Arsenal")
+    ],
+    "Giornata 3": [
+        ("Real Madrid", "Manchester City"),
+        ("Bayern Monaco", "PSG"),
+        ("Inter", "Barcelona"),
+        ("Arsenal", "Bayer Leverkusen"),
+        ("Atalanta", "Juventus")
+    ]
+}
 
-# --- SELEZIONE PARTITA ---
-st.subheader("⚽ Seleziona la Sfida")
-col_sel1, col_sel2 = st.columns(2)
+# --- SELEZIONE GIORNATA E PARTITA PROGRAMMATA ---
+st.subheader("📅 Calendario & Partite Programmate")
+col_giornata, col_partita = st.columns(2)
 
-with col_sel1:
-    casa = st.selectbox("Squadra in Casa (1)", squadre, index=0)
+with col_giornata:
+    giornata_sel = st.selectbox("Seleziona la Giornata", list(calendario_cl.keys()), index=0)
 
-with col_sel2:
-    squadre_trasferta = [s for s in squadre if s != casa]
-    trasferta = st.selectbox("Squadra in Trasferta (2)", squadre_trasferta, index=0)
+partite_giornata = calendario_cl[giornata_sel]
+opzioni_partite = [f"{m[0]} vs {m[1]}" for m in partite_giornata]
+
+with col_partita:
+    partita_sel = st.selectbox("Seleziona il Match programmato", opzioni_partite, index=0)
+
+# Estrazione delle due squadre selezionate dal menu a tendina
+idx_partita = opzioni_partite.index(partita_sel)
+casa, trasferta = partite_giornata[idx_partita]
 
 st.divider()
 
-# Recupero dati e statistiche delle squadre
+# Recupero dati e statistiche delle squadre selezionate
 st_casa = stats_squadre_cl[casa]
 st_trasf = stats_squadre_cl[trasferta]
 
