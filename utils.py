@@ -1,3 +1,5 @@
+import streamlit as st  # <--- AGGIUNGI QUESTA RIGA IN CIMA AL FILE
+import google.generativeai as genai
 @st.cache_data(ttl=3600)
 def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
     """Genera un report tattico e discorsivo stile Sofascore usando Gemini AI."""
