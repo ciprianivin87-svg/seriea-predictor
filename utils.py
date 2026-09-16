@@ -21,7 +21,8 @@ def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, pr
             return "⚠️ Chiave GEMINI_API_KEY non trovata nei Secrets di Streamlit."
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Aggiornato a gemini-3.6-flash
+        model = genai.GenerativeModel('gemini-3.6-flash')
 
         pos_c = st_c.get('pos', 'N/D')
         pos_t = st_t.get('pos', 'N/D')
