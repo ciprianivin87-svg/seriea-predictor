@@ -1,3 +1,10 @@
+from utils import (
+    calcola_moltiplicatore_forma, calcola_pronostico,
+    calcola_probabilita_scommesse, genera_plotly_heatmap,
+    render_form_badges, get_team_key_players,
+    estrai_formazioni_match, genera_report_gemini  # <--- NUOVA IMPORTAZIONE
+)
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -188,7 +195,21 @@ def fetch_top_scorers():
     except Exception:
         pass
     return scorers_by_team, all_scorers_list
+    
+st.markdown("---")
+st.subheader("🧠 Approfondimenti IA (Analisi Tattica)")
 
+with st.spinner("Generazione analisi in corso..."):
+    report_ai = genera_report_gemini(casa, trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t)
+
+st.markdown(
+    f"""
+    <div style="background-color: #1e293b; padding: 20px; border-radius: 10px; border-left: 5px solid #38bdf8; color: #f8fafc; line-height: 1.6;">
+        {report_ai}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 def mostra_verifica_pronostici(partite_giornata, stats_squadre):
     partite_concluse = [m for m in partite_giornata if m.get("status") == "FINISHED"]
     if not partite_concluse:
