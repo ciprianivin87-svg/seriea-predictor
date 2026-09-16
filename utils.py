@@ -3,6 +3,49 @@ import pandas as pd
 from scipy.stats import poisson
 import plotly.graph_objects as go
 
+import google.generativeai as genai
+import streamlit as st
+
+@st.cache_data(ttl=3600)
+def genera_report_gemini(squadra_casa, squadra_trasferta, st_c, st_t, prob_1, prob_x, prob_2, g_c, g_t):
+    """Genera un report tattico e discorsivo stile Sofascore usando Gemini AI."""
+    try:
+        # Recupera la chiave dai Secrets di Streamlit
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if not api_key:
+            return "⚠️ Chiave GEMINI_API_KEY non trovata nei Secrets di Streamlit."
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+
+        pos_c = st_c.get('pos', 'N/D')
+        pos_t = st_t.get('pos', 'N/D')
+        pt_c = st_c.get('punti', 'N/D')
+        pt_t = st_t.get('punti', 'N/D')
+
+        prompt = f"""
+        Sei un analista tattico e giornalista sportivo professionista. 
+        Genera un'analisi pre-partita dinamica per l'incontro: {squadra_casa} vs {squadra_trasferta}.
+
+        Dati a disposizione:
+        - Classifica: {squadra_casa} ({pos_c}° posto, {pt_c} pt) vs {squadra_trasferta} ({pos_t}° posto, {pt_t} pt)
+        - Efficacia Offensiva/Difensiva: {squadra_casa} ({st_c['gf']:.2f} gol fatti/gara, {st_c['ga']:.2f} subiti/gara) vs {squadra_trasferta} ({st_t['gf']:.2f} gol fatti/gara, {st_t['ga']:.2f} subiti/gara)
+        - Ultime 5 gare: {squadra_casa} ({st_c.get('form_list')}) vs {squadra_trasferta} ({st_t.get('form_list')})
+        - Stima algoritmo Poisson: Vittoria Casa {prob_1:.1f}%, Pareggio {prob_x:.1f}%, Vittoria Trasferta {prob_2:.1f}%. Risultato esatto più probabile: {g_c}-{g_t}.
+
+        Struttura la risposta in Markdown con 3 sezioni chiare:
+        1. **Contesto e Forma Attuale**: Breve panoramica sul momento delle due squadre.
+        2. **Prospettiva Tattica & Tendenze**: Come si incrociano i valori d'attacco e difesa delle due squadre.
+        3. **Previsione dell'Analista**: Considerazioni finali sul pronostico stimato.
+
+        Usa un tono giornalistico, chiaro, avvincente e conciso (massimo 180 parole in totale). Non inserire introduzioni generiche.
+        """
+
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"⚠️ Impossibile generare l'analisi al momento: {str(e)}"
+
 def calcola_moltiplicatore_forma(form_list):
     """
     Calcola un moltiplicatore di forma basato sulle ultime 5 partite.
