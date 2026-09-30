@@ -50,7 +50,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-API_TOKEN = "2e52e41c56bc4d85b2cc3df2d03c00af"
+API_TOKEN = st.secrets.get("API_TOKEN", "")
+
+if not API_TOKEN:
+    st.error("🔑 Chiave API_TOKEN non trovata nei secrets di Streamlit!")
+
 HEADERS = {"X-Auth-Token": API_TOKEN}
 
 if "show_standings" not in st.session_state:
